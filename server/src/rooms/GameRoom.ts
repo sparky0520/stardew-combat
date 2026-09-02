@@ -60,14 +60,22 @@ export class GameRoom extends Room<any> {
             this.state.players.forEach((target: Player, targetId: string) => {
                 if (targetId !== client.sessionId) {
                     const dist = Math.sqrt(Math.pow(attacker.x - target.x, 2) + Math.pow(attacker.y - target.y, 2));
-                    if (dist < 60) {
+                    if (dist < 60 && target.health > 0) {
                         target.health -= 25;
                         if (target.health <= 0) {
                             attacker.kills += 1;
-                            // Respawn
-                            target.health = 100;
-                            target.x = Math.random() * 1200;
-                            target.y = Math.random() * 1200;
+                            client.send("killLog", { name: target.name });
+                            // Set to 0 so client knows they are dead
+                            target.health = 0;
+                            // Respawn after 3 seconds
+                            setTimeout(() => {
+                                if (this.state.players.has(targetId)) {
+                                    const p = this.state.players.get(targetId)!;
+                                    p.health = 100;
+                                    p.x = Math.random() * 1200;
+                                    p.y = Math.random() * 1200;
+                                }
+                            }, 3000);
                         }
                     }
                 }
@@ -108,6 +116,8 @@ export class GameRoom extends Room<any> {
         player.kills = 0;
         player.weaponId = "";
         player.ammo = 0;
+        player.name = options.name || "Unknown";
+        player.sprite = options.sprite || "priest1";
         this.state.players.set(client.sessionId, player);
     }
 

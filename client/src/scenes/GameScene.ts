@@ -7,16 +7,34 @@ export class GameScene extends Phaser.Scene {
     private room!: Room<GameState>;
     private playerEntities: { [sessionId: string]: Phaser.Physics.Arcade.Sprite } = {};
     private weaponDropEntities: { [id: string]: Phaser.GameObjects.Sprite } = {};
+    private nameTexts: { [sessionId: string]: Phaser.GameObjects.Text } = {};
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
     private spaceKey!: Phaser.Input.Keyboard.Key;
+    private tabKey!: Phaser.Input.Keyboard.Key;
+    private playerName!: string;
+    private roomNumber!: string;
+    private playerSprite!: string;
 
     constructor() {
         super({ key: 'GameScene' });
     }
 
+    init(data: any) {
+        this.playerName = data.playerName || 'Player';
+        this.roomNumber = data.roomNumber || 'game_room';
+        this.playerSprite = data.playerSprite || 'priest1';
+    }
+
     preload() {
-        this.load.image('player', 'assets/dungeon/2D Pixel Dungeon Asset Pack/Character_animation/priests_idle/priest1/v1/priest1_v1_1.png');
-        this.load.image('enemy', 'assets/dungeon/2D Pixel Dungeon Asset Pack/Character_animation/monsters_idle/skull/v1/skull_v1_1.png');
+        const sprites = ['priest1', 'priest2', 'priest3', 'skeleton1', 'skeleton2', 'skull', 'vampire'];
+        sprites.forEach(sprite => {
+            const isPriest = sprite.startsWith('priest');
+            const folder = isPriest ? 'priests_idle' : 'monsters_idle';
+            const filePrefix = sprite === 'skeleton1' ? 'skeleton' : sprite;
+            for (let i = 1; i <= 4; i++) {
+                this.load.image(`${sprite}_f${i}`, `assets/dungeon/2D Pixel Dungeon Asset Pack/Character_animation/${folder}/${sprite}/v1/${filePrefix}_v1_${i}.png`);
+            }
+        });
         this.load.image('chest', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/mini_chest/mini_chest_1.png');
     }
 
@@ -42,12 +60,32 @@ export class GameScene extends Phaser.Scene {
 
         this.cursors = this.input.keyboard!.createCursorKeys();
         this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+        this.tabKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.TAB);
         
+        this.input.keyboard!.on('keydown-TAB', (event: Event) => {
+            event.preventDefault();
+        });
+
+        // create animations
+        const sprites = ['priest1', 'priest2', 'priest3', 'skeleton1', 'skeleton2', 'skull', 'vampire'];
+        sprites.forEach(sprite => {
+            const frames = [];
+            for (let i = 1; i <= 4; i++) {
+                frames.push({ key: `${sprite}_f${i}` });
+            }
+            this.anims.create({
+                key: `${sprite}_idle`,
+                frames: frames,
+                frameRate: 8,
+                repeat: -1
+            });
+        });
+
         // Connect to the local Colyseus server
         this.client = new Client('ws://localhost:2567');
         
         try {
-            this.room = await this.client.joinOrCreate<GameState>('game_room');
+            this.room = await this.client.joinOrCreate<GameState>(this.roomNumber, { name: this.playerName, sprite: this.playerSprite });
             console.log('Joined room:', this.room.name);
             
             this.setupColyseusListeners();
@@ -60,21 +98,43 @@ export class GameScene extends Phaser.Scene {
     private setupColyseusListeners() {
         const callbacks = Callbacks.get(this.room);
 
+        let killLogTimeout: NodeJS.Timeout;
+        this.room.onMessage("killLog", (data) => {
+            const logger = document.getElementById('kill-logger');
+            if (logger) {
+                logger.innerText = `You Killed ${data.name}!`;
+                logger.style.opacity = '1';
+                clearTimeout(killLogTimeout);
+                killLogTimeout = setTimeout(() => {
+                    logger.style.opacity = '0';
+                }, 3000);
+            }
+        });
+
         // Listen for new players
         callbacks.onAdd("players", (player: Player, sessionId: string) => {
             console.log('Player added:', sessionId, player);
             
             const isCurrentPlayer = sessionId === this.room.sessionId;
-            const spriteKey = isCurrentPlayer ? 'player' : 'enemy';
+            const spriteKey = player.sprite || 'priest1';
             
-            const entity = this.physics.add.sprite(player.x, player.y, spriteKey);
+            const entity = this.physics.add.sprite(player.x, player.y, `${spriteKey}_f1`);
             entity.setScale(2); 
             entity.setCollideWorldBounds(true);
+            entity.play(`${spriteKey}_idle`);
             
             if (isCurrentPlayer) {
                 this.cameras.main.startFollow(entity, true, 0.1, 0.1);
                 const minimap = this.cameras.getCamera('mini');
                 if (minimap) minimap.startFollow(entity, true, 0.1, 0.1);
+            } else {
+                const text = this.add.text(player.x, player.y - 30, player.name || 'Unknown', {
+                    fontSize: '12px',
+                    color: '#ffffff',
+                    stroke: '#000000',
+                    strokeThickness: 2
+                }).setOrigin(0.5, 0.5);
+                this.nameTexts[sessionId] = text;
             }
             
             this.playerEntities[sessionId] = entity;
@@ -87,14 +147,30 @@ export class GameScene extends Phaser.Scene {
                 entity.destroy();
                 delete this.playerEntities[sessionId];
             }
+            const text = this.nameTexts[sessionId];
+            if (text) {
+                text.destroy();
+                delete this.nameTexts[sessionId];
+            }
         });
 
         // Listen for weapon drops
+        let dropLogTimeout: NodeJS.Timeout;
         callbacks.onAdd("weaponDrops", (drop: any, dropId: string) => {
             console.log('Weapon drop spawned:', drop);
             const entity = this.add.sprite(drop.x, drop.y, 'chest');
             entity.setScale(1.5); // Slightly scale up the chest
             this.weaponDropEntities[dropId] = entity;
+            
+            const logger = document.getElementById('drop-logger');
+            if (logger) {
+                logger.innerText = `A weapon drop has spawned!`;
+                logger.style.opacity = '1';
+                clearTimeout(dropLogTimeout);
+                dropLogTimeout = setTimeout(() => {
+                    logger.style.opacity = '0';
+                }, 3000);
+            }
         });
 
         callbacks.onRemove("weaponDrops", (_drop: any, dropId: string) => {
@@ -116,6 +192,15 @@ export class GameScene extends Phaser.Scene {
                         y: player.y,
                         duration: 50
                     });
+                    const text = this.nameTexts[sessionId];
+                    if (text) {
+                        this.tweens.add({
+                            targets: text,
+                            x: player.x,
+                            y: player.y - 30,
+                            duration: 50
+                        });
+                    }
                 }
             });
             this.updateUI();
@@ -127,7 +212,16 @@ export class GameScene extends Phaser.Scene {
     }
 
     private updateUI() {
-        const me = this.room.state.players.get(this.room.sessionId);
+        const me = this.room.state.players?.get(this.room.sessionId);
+        
+        const deathScreen = document.getElementById('death-screen');
+        if (me && deathScreen) {
+            if (me.health <= 0) {
+                deathScreen.style.display = 'flex';
+            } else {
+                deathScreen.style.display = 'none';
+            }
+        }
         
         const timerEl = document.getElementById('timer');
         if (timerEl) {
@@ -141,9 +235,10 @@ export class GameScene extends Phaser.Scene {
         const scoreboardEl = document.getElementById('scoreboard');
         if (scoreboardEl) {
             let html = '<b>Scoreboard</b><br/>';
-            this.room.state.players.forEach((player: any, sessionId: string) => {
+            this.room.state.players?.forEach((player: any, sessionId: string) => {
                 const isMe = sessionId === this.room.sessionId ? ' (You)' : '';
-                html += `${sessionId.substring(0, 4)}${isMe}: ${player.kills} kills<br/>`;
+                const pName = player.name || sessionId.substring(0, 4);
+                html += `${pName}${isMe}: ${player.kills} kills<br/>`;
             });
             scoreboardEl.innerHTML = html;
         }
@@ -170,8 +265,17 @@ export class GameScene extends Phaser.Scene {
         });
     }
 
-    update(_time: number, delta: number) {
+    update(_time: number, _delta: number) {
         if (!this.room) return;
+
+        // Tab key logic
+        if (this.tabKey.isDown) {
+            document.getElementById('scoreboard')!.style.display = 'block';
+            document.getElementById('dark-overlay')!.style.display = 'block';
+        } else {
+            document.getElementById('scoreboard')!.style.display = 'none';
+            document.getElementById('dark-overlay')!.style.display = 'none';
+        }
 
         // Pickup weapon
         if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
@@ -179,6 +283,13 @@ export class GameScene extends Phaser.Scene {
         }
 
         // Handle local input
+        const me = this.room.state.players?.get(this.room.sessionId);
+        if (!me || me.health <= 0) {
+            const currentPlayer = this.playerEntities[this.room.sessionId];
+            if (currentPlayer) currentPlayer.setVelocity(0, 0);
+            return;
+        }
+
         const speed = 200;
         let dx = 0;
         let dy = 0;

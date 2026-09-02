@@ -6,7 +6,9 @@ export const Player = schema({
     health: t.number(),
     kills: t.number(),
     weaponId: t.string(),
-    ammo: t.number()
+    ammo: t.number(),
+    name: t.string(),
+    sprite: t.string()
 }, "Player");
 export type Player = SchemaType<typeof Player>;
 
