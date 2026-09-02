@@ -66,8 +66,8 @@ export class GameRoom extends Room<any> {
                             attacker.kills += 1;
                             // Respawn
                             target.health = 100;
-                            target.x = Math.random() * 800;
-                            target.y = Math.random() * 600;
+                            target.x = Math.random() * 1200;
+                            target.y = Math.random() * 1200;
                         }
                     }
                 }
@@ -86,23 +86,24 @@ export class GameRoom extends Room<any> {
         }, 1000);
 
         this.weaponSpawnerInterval = setInterval(() => {
-            if (!this.state.gameEnded && this.state.weaponDrops.size < 10) {
+            // Scarce weapon drops: max 3 on the map at once
+            if (!this.state.gameEnded && this.state.weaponDrops.size < 3) {
                 const drop = new WeaponDrop();
-                drop.x = Math.random() * 800;
-                drop.y = Math.random() * 600;
+                drop.x = Math.random() * 1200;
+                drop.y = Math.random() * 1200;
                 drop.type = "sword";
                 drop.ammo = 10;
                 this.state.weaponDrops.set(`drop_${this.weaponIdCounter++}`, drop);
             }
-        }, 5000);
+        }, 20000); // 20 seconds interval
     }
 
     onJoin(client: Client, options: any) {
         console.log(client.sessionId, "joined!");
         const player = new Player();
         // Spawn at a random position (adjust based on map size later)
-        player.x = Math.random() * 800;
-        player.y = Math.random() * 600;
+        player.x = Math.random() * 1200;
+        player.y = Math.random() * 1200;
         player.health = 100;
         player.kills = 0;
         player.weaponId = "";

@@ -5,8 +5,8 @@ import { GameState, Player } from '../schema/GameState';
 export class GameScene extends Phaser.Scene {
     private client!: Client;
     private room!: Room<GameState>;
-    private playerEntities: { [sessionId: string]: Phaser.GameObjects.Sprite } = {};
-    private weaponDropEntities: { [id: string]: Phaser.GameObjects.Arc } = {};
+    private playerEntities: { [sessionId: string]: Phaser.Physics.Arcade.Sprite } = {};
+    private weaponDropEntities: { [id: string]: Phaser.GameObjects.Sprite } = {};
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
     private spaceKey!: Phaser.Input.Keyboard.Key;
 
@@ -15,10 +15,31 @@ export class GameScene extends Phaser.Scene {
     }
 
     preload() {
-        this.load.image('player', 'player.jpg');
+        this.load.image('player', 'assets/dungeon/2D Pixel Dungeon Asset Pack/Character_animation/priests_idle/priest1/v1/priest1_v1_1.png');
+        this.load.image('enemy', 'assets/dungeon/2D Pixel Dungeon Asset Pack/Character_animation/monsters_idle/skull/v1/skull_v1_1.png');
+        this.load.image('chest', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/mini_chest/mini_chest_1.png');
     }
 
     async create() {
+        // Setup Map and Camera
+        this.cameras.main.setBounds(0, 0, 1200, 1200);
+        this.cameras.main.setZoom(2); // Zoom in on the pixel art
+        this.physics.world.setBounds(0, 0, 1200, 1200);
+        
+        // Draw a basic grid background
+        this.add.grid(600, 600, 1200, 1200, 50, 50, 0x222222, 1, 0x333333, 1);
+
+        // Setup Minimap (Top Left corner)
+        const minimap = this.cameras.add(10, 50, 200, 200).setZoom(0.4).setName('mini');
+        minimap.setBackgroundColor(0x001122);
+        
+        // Add a visual border to the minimap (drawn on the main UI layer)
+        const border = this.add.graphics();
+        border.lineStyle(4, 0xffffff, 1);
+        border.strokeRect(10, 50, 200, 200);
+        border.setScrollFactor(0); // Fix it to the screen
+        minimap.ignore(border); // Don't draw the border inside the minimap itself
+
         this.cursors = this.input.keyboard!.createCursorKeys();
         this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
         
@@ -43,12 +64,17 @@ export class GameScene extends Phaser.Scene {
         callbacks.onAdd("players", (player: Player, sessionId: string) => {
             console.log('Player added:', sessionId, player);
             
-            const entity = this.add.sprite(player.x, player.y, 'player');
-            entity.setScale(0.1); // Scale it down since AI generated images are usually large
-            
             const isCurrentPlayer = sessionId === this.room.sessionId;
-            if (!isCurrentPlayer) {
-                entity.setTint(0xff8888); // Tint enemies slightly red
+            const spriteKey = isCurrentPlayer ? 'player' : 'enemy';
+            
+            const entity = this.physics.add.sprite(player.x, player.y, spriteKey);
+            entity.setScale(2); 
+            entity.setCollideWorldBounds(true);
+            
+            if (isCurrentPlayer) {
+                this.cameras.main.startFollow(entity, true, 0.1, 0.1);
+                const minimap = this.cameras.getCamera('mini');
+                if (minimap) minimap.startFollow(entity, true, 0.1, 0.1);
             }
             
             this.playerEntities[sessionId] = entity;
@@ -65,8 +91,9 @@ export class GameScene extends Phaser.Scene {
 
         // Listen for weapon drops
         callbacks.onAdd("weaponDrops", (drop: any, dropId: string) => {
-            console.log(drop);
-            const entity = this.add.circle(drop.x, drop.y, 10, 0xffff00); // Yellow circle for weapon drop
+            console.log('Weapon drop spawned:', drop);
+            const entity = this.add.sprite(drop.x, drop.y, 'chest');
+            entity.setScale(1.5); // Slightly scale up the chest
             this.weaponDropEntities[dropId] = entity;
         });
 
@@ -82,7 +109,7 @@ export class GameScene extends Phaser.Scene {
         this.room.onStateChange((state) => {
             state.players.forEach((player: Player, sessionId: string) => {
                 const entity = this.playerEntities[sessionId];
-                if (entity) {
+                if (entity && sessionId !== this.room.sessionId) {
                     this.tweens.add({
                         targets: entity,
                         x: player.x,
@@ -167,15 +194,18 @@ export class GameScene extends Phaser.Scene {
             dx /= length;
             dy /= length;
             
-            // Move locally
+            // Move locally using physics
             const currentPlayer = this.playerEntities[this.room.sessionId];
             if (currentPlayer) {
-                // To keep it simple in this prototype, we send the new intended position.
-                // In a true authoritative game, we send inputs and the server simulates.
-                const newX = currentPlayer.x + dx * speed * (delta / 1000);
-                const newY = currentPlayer.y + dy * speed * (delta / 1000);
+                currentPlayer.setVelocity(dx * speed, dy * speed);
                 
-                this.room.send("move", { x: newX, y: newY });
+                // Send the resulting physics position to the server
+                this.room.send("move", { x: currentPlayer.x, y: currentPlayer.y });
+            }
+        } else {
+            const currentPlayer = this.playerEntities[this.room.sessionId];
+            if (currentPlayer) {
+                currentPlayer.setVelocity(0, 0);
             }
         }
     }
