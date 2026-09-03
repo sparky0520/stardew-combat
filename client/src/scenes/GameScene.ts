@@ -39,7 +39,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     preload() {
-        const spritesheetAvatars = ['skeleton', 'vampire'];
+        const spritesheetAvatars = ['knight', 'skeleton', 'vampire'];
         spritesheetAvatars.forEach(sprite => {
             this.load.spritesheet(`${sprite}_idle`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_idle.png`, { frameWidth: 32, frameHeight: 32 });
             this.load.spritesheet(`${sprite}_movement`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_movement.png`, { frameWidth: 32, frameHeight: 32 });
@@ -143,18 +143,20 @@ export class GameScene extends Phaser.Scene {
             event.preventDefault();
         });
 
-        const spritesheetFrames: { [key: string]: { idle: number, movement: number, attack: number, damage: number } } = {
-            'skeleton': { idle: 6, movement: 10, attack: 9, damage: 5 },
-            'vampire': { idle: 6, movement: 8, attack: 16, damage: 5 }
+        const spritesheetFrames: { [key: string]: { idle: number, movement: number, attack: number, damage: number, death: number } } = {
+            'knight': { idle: 6, movement: 10, attack: 9, damage: 5, death: 10 },
+            'skeleton': { idle: 6, movement: 10, attack: 9, damage: 5, death: 10 },
+            'vampire': { idle: 6, movement: 8, attack: 16, damage: 5, death: 10 }
         };
 
-        const spritesheetAvatars = ['skeleton', 'vampire'];
+        const spritesheetAvatars = ['knight', 'skeleton', 'vampire'];
         spritesheetAvatars.forEach(sprite => {
             const f = spritesheetFrames[sprite];
             this.anims.create({ key: `${sprite}_idle`, frames: this.anims.generateFrameNumbers(`${sprite}_idle`, { start: 0, end: f.idle - 1 }), frameRate: 8, repeat: -1 });
             this.anims.create({ key: `${sprite}_movement`, frames: this.anims.generateFrameNumbers(`${sprite}_movement`, { start: 0, end: f.movement - 1 }), frameRate: 12, repeat: -1 });
             this.anims.create({ key: `${sprite}_attack`, frames: this.anims.generateFrameNumbers(`${sprite}_attack`, { start: 0, end: f.attack - 1 }), frameRate: 15, repeat: 0 });
             this.anims.create({ key: `${sprite}_take_damage`, frames: this.anims.generateFrameNumbers(`${sprite}_take_damage`, { start: 0, end: f.damage - 1 }), frameRate: 12, repeat: 0 });
+            this.anims.create({ key: `${sprite}_death`, frames: this.anims.generateFrameNumbers(`${sprite}_death`, { start: 0, end: f.death - 1 }), frameRate: 10, repeat: 0 });
         });
 
         this.anims.create({
