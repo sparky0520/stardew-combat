@@ -35,19 +35,10 @@ export class GameScene extends Phaser.Scene {
     init(data: any) {
         this.playerName = data.playerName || 'Player';
         this.roomNumber = data.roomNumber || 'game_room';
-        this.playerSprite = data.playerSprite || 'priest1';
+        this.playerSprite = data.playerSprite || 'skeleton';
     }
 
     preload() {
-        const frameAvatars = ['priest'];
-        frameAvatars.forEach(sprite => {
-            const isPriest = sprite.startsWith('priest');
-            const folder = isPriest ? 'priests_idle' : 'monsters_idle';
-            for (let i = 1; i <= 4; i++) {
-                this.load.image(`${sprite}_f${i}`, `assets/dungeon/2D Pixel Dungeon Asset Pack/Character_animation/${folder}/${sprite}/v1/${sprite}_v1_${i}.png`);
-            }
-        });
-
         const spritesheetAvatars = ['skeleton', 'vampire'];
         spritesheetAvatars.forEach(sprite => {
             this.load.spritesheet(`${sprite}_idle`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_idle.png`, { frameWidth: 32, frameHeight: 32 });
@@ -150,21 +141,6 @@ export class GameScene extends Phaser.Scene {
         
         this.input.keyboard!.on('keydown-TAB', (event: Event) => {
             event.preventDefault();
-        });
-
-        // create animations
-        const frameAvatars = ['priest'];
-        frameAvatars.forEach(sprite => {
-            const frames = [];
-            for (let i = 1; i <= 4; i++) {
-                frames.push({ key: `${sprite}_f${i}` });
-            }
-            this.anims.create({
-                key: `${sprite}_idle`,
-                frames: frames,
-                frameRate: 8,
-                repeat: -1
-            });
         });
 
         const spritesheetFrames: { [key: string]: { idle: number, movement: number, attack: number, damage: number } } = {
@@ -318,25 +294,18 @@ export class GameScene extends Phaser.Scene {
             console.log('Player added:', sessionId, player);
             
             const isCurrentPlayer = sessionId === this.room.sessionId;
-            const spriteKey = player.sprite || 'priest';
+            const spriteKey = player.sprite || 'skeleton';
             
-            const isSpritesheetAvatar = ['skeleton', 'vampire'].includes(spriteKey);
-            const initialTexture = isSpritesheetAvatar ? `${spriteKey}_idle` : `${spriteKey}_f1`;
+            const initialTexture = `${spriteKey}_idle`;
             
             const entity = this.physics.add.sprite(player.x, player.y, initialTexture);
             entity.setScale(2); 
             entity.setDepth(2); // Players above traps and chests
             
             // Adjust physics body size based on sprite type so transparent padding doesn't create huge collision boxes
-            if (isSpritesheetAvatar) {
-                // 32x32 original sprite -> shrink to center
-                entity.body.setSize(14, 20);
-                entity.body.setOffset(9, 12);
-            } else {
-                // 16x16 original sprite -> keep relatively normal, but maybe shave off a bit
-                entity.body.setSize(12, 14);
-                entity.body.setOffset(2, 2);
-            }
+            // 32x32 original sprite -> shrink to center
+            entity.body.setSize(14, 20);
+            entity.body.setOffset(9, 12);
             
             entity.setCollideWorldBounds(true);
             entity.play(`${spriteKey}_idle`);
@@ -592,12 +561,10 @@ export class GameScene extends Phaser.Scene {
                             else if (player.x > entity.x + 0.5) entity.flipX = false;
                         }
 
-                        if (['skeleton', 'vampire'].includes(player.sprite)) {
-                            if (isMoving) {
-                                entity.play(`${player.sprite}_movement`, true);
-                            } else if (!entity.getData('isDead') && entity.anims.currentAnim?.key !== `${player.sprite}_attack` && entity.anims.currentAnim?.key !== `${player.sprite}_take_damage`) {
-                                entity.play(`${player.sprite}_idle`, true);
-                            }
+                        if (isMoving) {
+                            entity.play(`${player.sprite}_movement`, true);
+                        } else if (!entity.getData('isDead') && entity.anims.currentAnim?.key !== `${player.sprite}_attack` && entity.anims.currentAnim?.key !== `${player.sprite}_take_damage`) {
+                            entity.play(`${player.sprite}_idle`, true);
                         }
 
                         this.tweens.add({
@@ -642,20 +609,11 @@ export class GameScene extends Phaser.Scene {
                     const wasDead = entity.getData('isDead');
                     if (player.health <= 0 && !wasDead) {
                         entity.setData('isDead', true);
-                        if (['skeleton', 'vampire'].includes(player.sprite)) {
-                            entity.play(`${player.sprite}_death`, true);
-                            this.sound.play('enemy_death', { volume: 0.7 });
-                        } else {
-                            entity.setRotation(Math.PI / 2); // Generic "fallen over" for priests
-                            this.sound.play('player_death', { volume: 0.8 });
-                        }
+                        entity.play(`${player.sprite}_death`, true);
+                        this.sound.play('enemy_death', { volume: 0.7 });
                     } else if (player.health > 0 && wasDead) {
                         entity.setData('isDead', false);
-                        if (['skeleton', 'vampire'].includes(player.sprite)) {
-                            entity.play(`${player.sprite}_idle`, true);
-                        } else {
-                            entity.setRotation(0);
-                        }
+                        entity.play(`${player.sprite}_idle`, true);
                     }
                 }
             });
@@ -732,7 +690,7 @@ export class GameScene extends Phaser.Scene {
                 const playerState = this.room.state.players.get(data.playerId);
                 const spriteKey = playerState?.sprite;
                 
-                if (spriteKey && ['skeleton', 'vampire'].includes(spriteKey)) {
+                if (spriteKey) {
                     attacker.play(`${spriteKey}_attack`, true);
                     attacker.once('animationcomplete', () => {
                         if (attacker.getData('isDead')) return;
@@ -774,7 +732,7 @@ export class GameScene extends Phaser.Scene {
                     flame.once('animationcomplete', () => {
                         flame.destroy();
                     });
-                } else if (!spriteKey || !['skeleton', 'vampire'].includes(spriteKey)) {
+                } else if (!spriteKey) {
                     const sword = this.add.graphics();
                     sword.fillStyle(0xcccccc, 1);
                     sword.lineStyle(2, 0x000000, 1);
@@ -812,7 +770,7 @@ export class GameScene extends Phaser.Scene {
                 const playerState = this.room.state.players.get(data.targetId);
                 const spriteKey = playerState?.sprite;
 
-                if (spriteKey && ['skeleton', 'vampire'].includes(spriteKey)) {
+                if (spriteKey) {
                     target.play(`${spriteKey}_take_damage`, true);
                     target.once('animationcomplete', () => {
                         target.play(`${spriteKey}_idle`, true);
@@ -1098,9 +1056,7 @@ export class GameScene extends Phaser.Scene {
                 if (dx < 0) currentPlayer.flipX = true;
                 else if (dx > 0) currentPlayer.flipX = false;
                 
-                if (['skeleton', 'vampire'].includes(me.sprite)) {
-                    currentPlayer.play(`${me.sprite}_movement`, true);
-                }
+                currentPlayer.play(`${me.sprite}_movement`, true);
                 
                 // Send the resulting physics position to the server
                 this.room.send("move", { x: currentPlayer.x, y: currentPlayer.y });
@@ -1109,10 +1065,8 @@ export class GameScene extends Phaser.Scene {
             const currentPlayer = this.playerEntities[this.room.sessionId];
             if (currentPlayer) {
                 currentPlayer.setVelocity(0, 0);
-                if (['skeleton', 'vampire'].includes(me.sprite)) {
-                    if (!currentPlayer.getData('isDead') && currentPlayer.anims.currentAnim?.key !== `${me.sprite}_attack` && currentPlayer.anims.currentAnim?.key !== `${me.sprite}_take_damage`) {
-                        currentPlayer.play(`${me.sprite}_idle`, true);
-                    }
+                if (!currentPlayer.getData('isDead') && currentPlayer.anims.currentAnim?.key !== `${me.sprite}_attack` && currentPlayer.anims.currentAnim?.key !== `${me.sprite}_take_damage`) {
+                    currentPlayer.play(`${me.sprite}_idle`, true);
                 }
             }
         }
