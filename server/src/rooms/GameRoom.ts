@@ -1,27 +1,66 @@
 import { Room, Client } from "colyseus";
-import { GameState, Player, WeaponDrop } from "../schema/GameState";
+import { GameState, Player, WeaponDrop, Trap } from "../schema/GameState";
 import { MapSchema } from "@colyseus/schema";
-import { PLAYER_SPAWNS, WEAPON_SPAWNS } from "../shared/mapConfig";
+import { PLAYER_SPAWNS, WEAPON_SPAWNS, TRAP_SPAWNS } from "../shared/mapConfig";
 
 export class GameRoom extends Room<any> {
     maxClients = 8;
     timerInterval: NodeJS.Timeout | null = null;
     weaponSpawnerInterval: NodeJS.Timeout | null = null;
     weaponIdCounter = 0;
+    trapIdCounter = 0;
+
+    private handlePlayerDeath(targetId: string, target: Player, killerClient?: Client, killerName?: string) {
+        if (killerClient && killerName) {
+            killerClient.send("killLog", { name: target.name });
+        }
+        target.health = 0;
+        
+        setTimeout(() => {
+            if (this.state.players.has(targetId)) {
+                const p = this.state.players.get(targetId)!;
+                p.health = 100;
+                const spawn = PLAYER_SPAWNS[Math.floor(Math.random() * PLAYER_SPAWNS.length)];
+                p.x = spawn.x;
+                p.y = spawn.y;
+                p.isImmune = true;
+                
+                const targetClient = this.clients.find(c => c.sessionId === targetId);
+                if (targetClient) {
+                    targetClient.send("respawn", { x: p.x, y: p.y });
+                }
+
+                setTimeout(() => {
+                    if (this.state.players.has(targetId)) {
+                        this.state.players.get(targetId)!.isImmune = false;
+                    }
+                }, 5000);
+            }
+        }, 3000);
+    }
 
     onCreate(options: any) {
         const state = new GameState();
         state.players = new MapSchema<Player>();
         state.weaponDrops = new MapSchema<WeaponDrop>();
+        state.traps = new MapSchema<Trap>();
         state.timeLeft = 300;
         state.gameEnded = false;
         this.setState(state);
         
+        // Initialize Spikes at choke points
+        TRAP_SPAWNS.forEach((spawn) => {
+            const trap = new Trap();
+            trap.x = spawn.x;
+            trap.y = spawn.y;
+            trap.type = "spike";
+            trap.active = false;
+            this.state.traps.set(`trap_${this.trapIdCounter++}`, trap);
+        });
+
         this.onMessage("move", (client, message) => {
             const player = this.state.players.get(client.sessionId);
             if (player && !this.state.gameEnded) {
-                // In a real authoritative game, we would validate movement and collisions here.
-                // For this prototype, we accept the client's position to keep it simple.
                 player.x = message.x;
                 player.y = message.y;
             }
@@ -31,9 +70,8 @@ export class GameRoom extends Room<any> {
             const player = this.state.players.get(client.sessionId);
             if (!player || this.state.gameEnded) return;
 
-            // Find closest weapon drop
             let closestDropId = "";
-            let minDistance = 50; // pickup radius
+            let minDistance = 100; 
 
             this.state.weaponDrops.forEach((drop: WeaponDrop, dropId: string) => {
                 const dist = Math.sqrt(Math.pow(player.x - drop.x, 2) + Math.pow(player.y - drop.y, 2));
@@ -63,7 +101,6 @@ export class GameRoom extends Room<any> {
 
             this.broadcast("playerAttacked", { playerId: client.sessionId });
             
-            // Basic combat: hit any player within 60 units (Zelda sword style)
             this.state.players.forEach((target: Player, targetId: string) => {
                 if (targetId !== client.sessionId) {
                     const dist = Math.sqrt(Math.pow(attacker.x - target.x, 2) + Math.pow(attacker.y - target.y, 2));
@@ -72,41 +109,46 @@ export class GameRoom extends Room<any> {
                         this.broadcast("damageTaken", { targetId: targetId, damage: 25, x: target.x, y: target.y });
                         if (target.health <= 0) {
                             attacker.kills += 1;
-                            client.send("killLog", { name: target.name });
-                            // Set to 0 so client knows they are dead
-                            target.health = 0;
-                            // Respawn after 3 seconds
-                            setTimeout(() => {
-                                if (this.state.players.has(targetId)) {
-                                    const p = this.state.players.get(targetId)!;
-                                    p.health = 100;
-                                    const spawn = PLAYER_SPAWNS[Math.floor(Math.random() * PLAYER_SPAWNS.length)];
-                                    p.x = spawn.x;
-                                    p.y = spawn.y;
-                                    p.isImmune = true;
-                                    
-                                    const targetClient = this.clients.find(c => c.sessionId === targetId);
-                                    if (targetClient) {
-                                        targetClient.send("respawn", { x: p.x, y: p.y });
-                                    }
-
-                                    setTimeout(() => {
-                                        if (this.state.players.has(targetId)) {
-                                            this.state.players.get(targetId)!.isImmune = false;
-                                        }
-                                    }, 5000);
-                                }
-                            }, 3000);
+                            this.handlePlayerDeath(targetId, target, client, target.name);
                         }
                     }
                 }
             });
         });
 
-        // Start game timer
+        // Start game timer and Trap logic
         this.timerInterval = setInterval(() => {
             if (this.state.timeLeft > 0) {
                 this.state.timeLeft -= 1;
+                
+                // Toggle spike traps every 3 seconds
+                if (this.state.timeLeft % 3 === 0) {
+                    this.state.traps.forEach((trap: Trap) => {
+                        if (trap.type === "spike") {
+                            trap.active = !trap.active;
+                        }
+                    });
+                }
+
+                // Check spike trap damage
+                this.state.traps.forEach((trap: Trap) => {
+                    if (trap.active && trap.type === "spike") {
+                        this.state.players.forEach((player: Player, sessionId: string) => {
+                            if (player.health > 0 && !player.isImmune) {
+                                const dist = Math.sqrt(Math.pow(player.x - trap.x, 2) + Math.pow(player.y - trap.y, 2));
+                                if (dist < 25) { // 25 pixel radius for stepping on spikes
+                                    player.health -= 15; // DOT or heavy hit
+                                    this.broadcast("damageTaken", { targetId: sessionId, damage: 15, x: player.x, y: player.y });
+                                    
+                                    if (player.health <= 0) {
+                                        this.handlePlayerDeath(sessionId, player);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
+                
             } else {
                 this.state.gameEnded = true;
                 if (this.timerInterval) clearInterval(this.timerInterval);

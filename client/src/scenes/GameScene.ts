@@ -8,6 +8,7 @@ export class GameScene extends Phaser.Scene {
     private room!: Room<GameState>;
     private playerEntities: { [sessionId: string]: Phaser.Physics.Arcade.Sprite } = {};
     private weaponDropEntities: { [id: string]: Phaser.GameObjects.Sprite } = {};
+    private trapEntities: { [id: string]: Phaser.GameObjects.Sprite } = {};
     private nameTexts: { [sessionId: string]: Phaser.GameObjects.Text } = {};
     private healthBars: { [sessionId: string]: Phaser.GameObjects.Graphics } = {};
     private wallLayer!: Phaser.Tilemaps.TilemapLayer;
@@ -48,6 +49,10 @@ export class GameScene extends Phaser.Scene {
 
         this.load.image('chest', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/mini_chest/mini_chest_1.png');
         this.load.image('dungeon_tiles', 'assets/dungeon/2D Pixel Dungeon Asset Pack/character and tileset/Dungeon_Tileset.png');
+
+        for (let i = 1; i <= 4; i++) {
+            this.load.image(`trap_peaks_${i}`, `assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/peaks/peaks_${i}.png`);
+        }
     }
 
     async create() {
@@ -116,6 +121,18 @@ export class GameScene extends Phaser.Scene {
             this.anims.create({ key: `${sprite}_take_damage`, frames: this.anims.generateFrameNumbers(`${sprite}_take_damage`, { start: 0, end: f.damage - 1 }), frameRate: 12, repeat: 0 });
         });
 
+        this.anims.create({
+            key: 'peaks_trigger',
+            frames: [
+                { key: 'trap_peaks_1' },
+                { key: 'trap_peaks_2' },
+                { key: 'trap_peaks_3' },
+                { key: 'trap_peaks_4' }
+            ],
+            frameRate: 15,
+            repeat: 0
+        });
+
         // Connect to the local Colyseus server
         this.client = new Client('ws://localhost:2567');
         
@@ -158,6 +175,7 @@ export class GameScene extends Phaser.Scene {
             
             const entity = this.physics.add.sprite(player.x, player.y, initialTexture);
             entity.setScale(2); 
+            entity.setDepth(2); // Players above traps and chests
             
             // Adjust physics body size based on sprite type so transparent padding doesn't create huge collision boxes
             if (isNewEnemy) {
@@ -188,9 +206,11 @@ export class GameScene extends Phaser.Scene {
                     stroke: '#000000',
                     strokeThickness: 2
                 }).setOrigin(0.5, 0.5);
+                text.setDepth(3);
                 this.nameTexts[sessionId] = text;
                 
                 const hpBar = this.add.graphics();
+                hpBar.setDepth(3);
                 hpBar.setPosition(player.x, player.y - 18);
                 hpBar.fillStyle(0xff0000);
                 hpBar.fillRect(-15, 0, 30, 4);
@@ -227,6 +247,7 @@ export class GameScene extends Phaser.Scene {
             console.log('Weapon drop spawned:', drop);
             const entity = this.add.sprite(drop.x, drop.y, 'chest');
             entity.setScale(1.5); // Slightly scale up the chest
+            entity.setDepth(1); // Chests above traps, below players
             this.weaponDropEntities[dropId] = entity;
             
             const logger = document.getElementById('drop-logger');
@@ -266,6 +287,31 @@ export class GameScene extends Phaser.Scene {
             if (entity) {
                 entity.destroy();
                 delete this.weaponDropEntities[dropId];
+            }
+        });
+
+        // Listen for Traps
+        this.room.state.traps.onAdd((trap: any, trapId: string) => {
+            const entity = this.add.sprite(trap.x, trap.y, 'trap_peaks_1');
+            entity.setScale(2);
+            entity.setDepth(0); // Render floor-level
+            this.trapEntities[trapId] = entity;
+            
+            trap.onChange(() => {
+                if (trap.active) {
+                    entity.play('peaks_trigger');
+                } else {
+                    entity.stop();
+                    entity.setTexture('trap_peaks_1');
+                }
+            });
+        });
+
+        this.room.state.traps.onRemove((trap: any, trapId: string) => {
+            const entity = this.trapEntities[trapId];
+            if (entity) {
+                entity.destroy();
+                delete this.trapEntities[trapId];
             }
         });
 

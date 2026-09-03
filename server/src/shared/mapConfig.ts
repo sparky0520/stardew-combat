@@ -77,3 +77,15 @@ export const WEAPON_SPAWNS = [
     toWorld(8, MAP_HEIGHT - 9),
     toWorld(MAP_WIDTH - 9, MAP_HEIGHT - 9)
 ];
+
+export const TRAP_SPAWNS = [
+    // Choke points entering the main center area
+    toWorld(19, 12),
+    toWorld(20, 12),
+    toWorld(19, 27),
+    toWorld(20, 27),
+    toWorld(12, 19),
+    toWorld(12, 20),
+    toWorld(27, 19),
+    toWorld(27, 20)
+];
