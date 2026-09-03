@@ -143,10 +143,9 @@ export class GameScene extends Phaser.Scene {
         this.anims.create({
             key: 'peaks_trigger',
             frames: [
-                { key: 'trap_peaks_1' },
-                { key: 'trap_peaks_2' },
                 { key: 'trap_peaks_3' },
-                { key: 'trap_peaks_4' }
+                { key: 'trap_peaks_2' },
+                { key: 'trap_peaks_1' }
             ],
             frameRate: 10,
             repeat: -1,
@@ -309,7 +308,7 @@ export class GameScene extends Phaser.Scene {
         });
 
         callbacks.onAdd("traps", (trap: any, trapId: string) => {
-            const entity = this.add.sprite(trap.x, trap.y, 'trap_peaks_1');
+            const entity = this.add.sprite(trap.x, trap.y, 'trap_peaks_3');
             entity.setScale(2);
             entity.setDepth(0); // Render floor-level
             this.trapEntities[trapId] = entity;
@@ -421,10 +420,10 @@ export class GameScene extends Phaser.Scene {
                         entity.setTint(0xff5555);
                     } else if (!isActive && isPlayingAnim) {
                         entity.stop();
-                        entity.setTexture('trap_peaks_1');
+                        entity.setTexture('trap_peaks_3');
                         entity.clearTint();
-                    } else if (!isActive && entity.texture?.key !== 'trap_peaks_1') {
-                        entity.setTexture('trap_peaks_1');
+                    } else if (!isActive && entity.texture?.key !== 'trap_peaks_3') {
+                        entity.setTexture('trap_peaks_3');
                         entity.clearTint();
                     }
                 }
