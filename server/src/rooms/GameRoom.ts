@@ -141,6 +141,7 @@ export class GameRoom extends Room<any> {
                                     this.broadcast("damageTaken", { targetId: sessionId, damage: 15, x: player.x, y: player.y });
                                     
                                     if (player.health <= 0) {
+                                        this.broadcast("killLog", { message: `${player.name} died to a Spike Trap!` });
                                         this.handlePlayerDeath(sessionId, player);
                                     }
                                 }

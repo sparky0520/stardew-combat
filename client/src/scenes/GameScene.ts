@@ -154,7 +154,7 @@ export class GameScene extends Phaser.Scene {
         this.room.onMessage("killLog", (data) => {
             const logger = document.getElementById('kill-logger');
             if (logger) {
-                logger.innerText = `You Killed ${data.name}!`;
+                logger.innerText = data.message || `You Killed ${data.name}!`;
                 logger.style.opacity = '1';
                 clearTimeout(killLogTimeout);
                 killLogTimeout = setTimeout(() => {
@@ -291,7 +291,7 @@ export class GameScene extends Phaser.Scene {
         });
 
         // Listen for Traps
-        this.room.state.traps.onAdd((trap: any, trapId: string) => {
+        callbacks.onAdd("traps", (trap: any, trapId: string) => {
             const entity = this.add.sprite(trap.x, trap.y, 'trap_peaks_1');
             entity.setScale(2);
             entity.setDepth(0); // Render floor-level
@@ -307,7 +307,7 @@ export class GameScene extends Phaser.Scene {
             });
         });
 
-        this.room.state.traps.onRemove((trap: any, trapId: string) => {
+        callbacks.onRemove("traps", (trap: any, trapId: string) => {
             const entity = this.trapEntities[trapId];
             if (entity) {
                 entity.destroy();
