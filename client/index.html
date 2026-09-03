@@ -312,7 +312,9 @@
         ctx.drawImage(cursorImg, -24, -24, 48, 48); 
         
         const dataURL = canvas.toDataURL();
-        document.body.style.cursor = `url('${dataURL}') 6 6, auto`; // 6,6 as hotspot
+        const cursorStyle = document.createElement('style');
+        cursorStyle.innerHTML = `* { cursor: url('${dataURL}') 6 6, auto !important; }`;
+        document.head.appendChild(cursorStyle);
       };
     </script>
     <script type="module" src="/src/main.ts"></script>
