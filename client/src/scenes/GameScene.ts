@@ -39,13 +39,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     preload() {
-        const spritesheetAvatars = ['knight', 'skeleton', 'vampire'];
+        const spritesheetAvatars = ['skeleton', 'vampire', 'knight'];
         spritesheetAvatars.forEach(sprite => {
-            this.load.spritesheet(`${sprite}_idle`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_idle.png`, { frameWidth: 32, frameHeight: 32 });
-            this.load.spritesheet(`${sprite}_movement`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_movement.png`, { frameWidth: 32, frameHeight: 32 });
-            this.load.spritesheet(`${sprite}_attack`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_attack.png`, { frameWidth: 32, frameHeight: 32 });
-            this.load.spritesheet(`${sprite}_take_damage`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_take_damage.png`, { frameWidth: 32, frameHeight: 32 });
-            this.load.spritesheet(`${sprite}_death`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_death.png`, { frameWidth: 32, frameHeight: 32 });
+            this.load.spritesheet(`${sprite}_idle`, `assets/avatars/${sprite}_idle.png`, { frameWidth: 32, frameHeight: 32 });
+            this.load.spritesheet(`${sprite}_movement`, `assets/avatars/${sprite}_movement.png`, { frameWidth: 32, frameHeight: 32 });
+            this.load.spritesheet(`${sprite}_attack`, `assets/avatars/${sprite}_attack.png`, { frameWidth: 32, frameHeight: 32 });
+            this.load.spritesheet(`${sprite}_take_damage`, `assets/avatars/${sprite}_take_damage.png`, { frameWidth: 32, frameHeight: 32 });
+            this.load.spritesheet(`${sprite}_death`, `assets/avatars/${sprite}_death.png`, { frameWidth: 32, frameHeight: 32 });
         });
 
         for (let i = 1; i <= 4; i++) {
@@ -143,20 +143,19 @@ export class GameScene extends Phaser.Scene {
             event.preventDefault();
         });
 
-        const spritesheetFrames: { [key: string]: { idle: number, movement: number, attack: number, damage: number, death: number } } = {
-            'knight': { idle: 6, movement: 10, attack: 9, damage: 5, death: 10 },
-            'skeleton': { idle: 6, movement: 10, attack: 9, damage: 5, death: 10 },
-            'vampire': { idle: 6, movement: 8, attack: 16, damage: 5, death: 10 }
+        const spritesheetFrames: { [key: string]: { idle: number, movement: number, attack: number, damage: number } } = {
+            'skeleton': { idle: 6, movement: 10, attack: 9, damage: 5 },
+            'vampire': { idle: 6, movement: 8, attack: 16, damage: 5 },
+            'knight': { idle: 6, movement: 8, attack: 7, damage: 5 }
         };
 
-        const spritesheetAvatars = ['knight', 'skeleton', 'vampire'];
+        const spritesheetAvatars = ['skeleton', 'vampire', 'knight'];
         spritesheetAvatars.forEach(sprite => {
             const f = spritesheetFrames[sprite];
             this.anims.create({ key: `${sprite}_idle`, frames: this.anims.generateFrameNumbers(`${sprite}_idle`, { start: 0, end: f.idle - 1 }), frameRate: 8, repeat: -1 });
             this.anims.create({ key: `${sprite}_movement`, frames: this.anims.generateFrameNumbers(`${sprite}_movement`, { start: 0, end: f.movement - 1 }), frameRate: 12, repeat: -1 });
             this.anims.create({ key: `${sprite}_attack`, frames: this.anims.generateFrameNumbers(`${sprite}_attack`, { start: 0, end: f.attack - 1 }), frameRate: 15, repeat: 0 });
             this.anims.create({ key: `${sprite}_take_damage`, frames: this.anims.generateFrameNumbers(`${sprite}_take_damage`, { start: 0, end: f.damage - 1 }), frameRate: 12, repeat: 0 });
-            this.anims.create({ key: `${sprite}_death`, frames: this.anims.generateFrameNumbers(`${sprite}_death`, { start: 0, end: f.death - 1 }), frameRate: 10, repeat: 0 });
         });
 
         this.anims.create({
