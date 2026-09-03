@@ -434,6 +434,31 @@ export class GameScene extends Phaser.Scene {
                     attacker.once('animationcomplete', () => {
                         attacker.play(`${spriteKey}_idle`, true);
                     });
+                } else if (data.weapon === 'bow') {
+                    const bow = this.add.graphics();
+                    bow.lineStyle(3, 0x8B4513, 1); // Brown wood
+                    bow.beginPath();
+                    bow.arc(0, 0, 15, Phaser.Math.DegToRad(-60), Phaser.Math.DegToRad(60), false);
+                    bow.strokePath();
+                    
+                    bow.lineStyle(1, 0xffffff, 0.8); // String
+                    bow.beginPath();
+                    bow.moveTo(15 * Math.cos(Phaser.Math.DegToRad(-60)), 15 * Math.sin(Phaser.Math.DegToRad(-60)));
+                    bow.lineTo(-10, 0); // Pulled back
+                    bow.lineTo(15 * Math.cos(Phaser.Math.DegToRad(60)), 15 * Math.sin(Phaser.Math.DegToRad(60)));
+                    bow.strokePath();
+
+                    bow.setPosition(attacker.x, attacker.y);
+                    bow.rotation = data.angle;
+
+                    this.tweens.add({
+                        targets: bow,
+                        scaleX: 1.2,
+                        scaleY: 0.9,
+                        duration: 100,
+                        yoyo: true,
+                        onComplete: () => bow.destroy()
+                    });
                 } else {
                     const sword = this.add.graphics();
                     sword.fillStyle(0xcccccc, 1);

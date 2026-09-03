@@ -103,7 +103,7 @@ export class GameRoom extends Room<any> {
                 attacker.weaponId = "";
             }
 
-            this.broadcast("playerAttacked", { playerId: client.sessionId });
+            this.broadcast("playerAttacked", { playerId: client.sessionId, weapon: currentWeapon, angle: message.angle || 0 });
             
             if (currentWeapon === "sword") {
                 this.state.players.forEach((target: Player, targetId: string) => {
