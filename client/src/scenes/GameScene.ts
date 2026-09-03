@@ -264,10 +264,15 @@ export class GameScene extends Phaser.Scene {
                 if (entity) {
                     if (sessionId !== this.room.sessionId) {
                         const isMoving = Math.abs(entity.x - player.x) > 1 || Math.abs(entity.y - player.y) > 1;
+                        
+                        if (isMoving) {
+                            if (player.x < entity.x - 0.5) entity.flipX = true;
+                            else if (player.x > entity.x + 0.5) entity.flipX = false;
+                        }
+
                         if (['skeleton1', 'skeleton2', 'vampire'].includes(player.sprite)) {
                             if (isMoving) {
                                 entity.play(`${player.sprite}_movement`, true);
-                                entity.flipX = (player.x < entity.x);
                             } else if (entity.anims.currentAnim?.key !== `${player.sprite}_attack` && entity.anims.currentAnim?.key !== `${player.sprite}_take_damage`) {
                                 entity.play(`${player.sprite}_idle`, true);
                             }
@@ -484,9 +489,12 @@ export class GameScene extends Phaser.Scene {
             const currentPlayer = this.playerEntities[this.room.sessionId];
             if (currentPlayer) {
                 currentPlayer.setVelocity(dx * speed, dy * speed);
+                
+                if (dx < 0) currentPlayer.flipX = true;
+                else if (dx > 0) currentPlayer.flipX = false;
+                
                 if (['skeleton1', 'skeleton2', 'vampire'].includes(me.sprite)) {
                     currentPlayer.play(`${me.sprite}_movement`, true);
-                    currentPlayer.flipX = (dx < 0);
                 }
                 
                 // Send the resulting physics position to the server

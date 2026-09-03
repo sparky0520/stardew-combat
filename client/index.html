@@ -139,16 +139,9 @@
         position: relative;
       }
       #sprite-preview img {
-        width: 100%;
         height: 100%;
         image-rendering: pixelated;
-      }
-      .sprite-anim-6 {
-        animation: play6 0.9s steps(6) infinite;
-      }
-      @keyframes play6 {
-        from { background-position: 0px 0px; }
-        to { background-position: -768px 0px; }
+        display: block;
       }
       #app { display: none; } /* Hidden until joined */
       #death-screen {
@@ -259,27 +252,22 @@
         nameDiv.innerText = sprite.name;
         inputEl.value = sprite.id;
         
-        previewDiv.className = ''; // reset classes
-        previewDiv.style.animation = ''; // clear inline animation style
-        
         if (sprite.type === 'frames') {
-          previewDiv.style.background = 'none';
           currentFrame = 1;
-          previewDiv.innerHTML = `<img id="preview-img" src="assets/dungeon/2D Pixel Dungeon Asset Pack/Character_animation/${sprite.folder}/${sprite.id}/v1/${sprite.id}_v1_1.png" />`;
+          previewDiv.innerHTML = `<img id="preview-img" style="width: 128px;" src="assets/dungeon/2D Pixel Dungeon Asset Pack/Character_animation/${sprite.folder}/${sprite.id}/v1/${sprite.id}_v1_1.png" />`;
           
           animInterval = setInterval(() => {
             currentFrame = (currentFrame % sprite.frames) + 1;
             document.getElementById('preview-img').src = `assets/dungeon/2D Pixel Dungeon Asset Pack/Character_animation/${sprite.folder}/${sprite.id}/v1/${sprite.id}_v1_${currentFrame}.png`;
           }, 150);
         } else {
-          previewDiv.innerHTML = '';
-          previewDiv.style.backgroundImage = `url('${sprite.src}')`;
-          // 6 frames means the background needs to be 6 times the width of the container
-          previewDiv.style.backgroundSize = `${sprite.frames * 100}% 100%`;
-          previewDiv.style.backgroundPosition = `0px 0px`;
+          previewDiv.innerHTML = `<img id="preview-img" style="width: ${sprite.frames * 128}px; position: absolute; left: 0; top: 0; transition: none;" src="${sprite.src}" />`;
           
-          // Use CSS steps animation instead of JS intervals
-          previewDiv.classList.add(`sprite-anim-${sprite.frames}`);
+          let frame = 0;
+          animInterval = setInterval(() => {
+            frame = (frame + 1) % sprite.frames;
+            document.getElementById('preview-img').style.transform = `translateX(-${frame * 128}px)`;
+          }, 150);
         }
       }
       
