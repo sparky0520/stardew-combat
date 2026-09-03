@@ -13,6 +13,7 @@ export class GameScene extends Phaser.Scene {
     private nameTexts: { [sessionId: string]: Phaser.GameObjects.Text } = {};
     private healthBars: { [sessionId: string]: Phaser.GameObjects.Graphics } = {};
     private wallLayer!: Phaser.Tilemaps.TilemapLayer;
+    private lastFired: number = 0;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
     private spaceKey!: Phaser.Input.Keyboard.Key;
     private tabKey!: Phaser.Input.Keyboard.Key;
@@ -46,6 +47,7 @@ export class GameScene extends Phaser.Scene {
             this.load.spritesheet(`${sprite}_movement`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_movement.png`, { frameWidth: 32, frameHeight: 32 });
             this.load.spritesheet(`${sprite}_attack`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_attack.png`, { frameWidth: 32, frameHeight: 32 });
             this.load.spritesheet(`${sprite}_take_damage`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_take_damage.png`, { frameWidth: 32, frameHeight: 32 });
+            this.load.spritesheet(`${sprite}_death`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_death.png`, { frameWidth: 32, frameHeight: 32 });
         });
 
         this.load.image('chest', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/mini_chest/mini_chest_1.png');
@@ -53,6 +55,10 @@ export class GameScene extends Phaser.Scene {
 
         for (let i = 1; i <= 4; i++) {
             this.load.image(`trap_peaks_${i}`, `assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/peaks/peaks_${i}.png`);
+        }
+        
+        for (let i = 1; i <= 4; i++) {
+            this.load.image(`flame_${i}`, `assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/flamethrower/flamethrower_2_${i}.png`);
         }
 
         this.load.image('arrow', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/arrow/Just_arrow.png');
@@ -150,6 +156,18 @@ export class GameScene extends Phaser.Scene {
             frameRate: 10,
             repeat: -1,
             yoyo: true
+        });
+
+        this.anims.create({
+            key: 'flame_fire',
+            frames: [
+                { key: 'flame_1' },
+                { key: 'flame_2' },
+                { key: 'flame_3' },
+                { key: 'flame_4' }
+            ],
+            frameRate: 15,
+            repeat: 0
         });
 
         // Connect to the local Colyseus server
@@ -355,7 +373,7 @@ export class GameScene extends Phaser.Scene {
                         if (['skeleton1', 'skeleton2', 'vampire'].includes(player.sprite)) {
                             if (isMoving) {
                                 entity.play(`${player.sprite}_movement`, true);
-                            } else if (entity.anims.currentAnim?.key !== `${player.sprite}_attack` && entity.anims.currentAnim?.key !== `${player.sprite}_take_damage`) {
+                            } else if (!entity.getData('isDead') && entity.anims.currentAnim?.key !== `${player.sprite}_attack` && entity.anims.currentAnim?.key !== `${player.sprite}_take_damage`) {
                                 entity.play(`${player.sprite}_idle`, true);
                             }
                         }
@@ -396,6 +414,24 @@ export class GameScene extends Phaser.Scene {
                         entity.setAlpha(0.5);
                     } else {
                         entity.setAlpha(1);
+                    }
+                    
+                    // Death animation logic
+                    const wasDead = entity.getData('isDead');
+                    if (player.health <= 0 && !wasDead) {
+                        entity.setData('isDead', true);
+                        if (['skeleton1', 'skeleton2', 'vampire'].includes(player.sprite)) {
+                            entity.play(`${player.sprite}_death`, true);
+                        } else {
+                            entity.setRotation(Math.PI / 2); // Generic "fallen over" for priests
+                        }
+                    } else if (player.health > 0 && wasDead) {
+                        entity.setData('isDead', false);
+                        if (['skeleton1', 'skeleton2', 'vampire'].includes(player.sprite)) {
+                            entity.play(`${player.sprite}_idle`, true);
+                        } else {
+                            entity.setRotation(0);
+                        }
                     }
                 }
             });
@@ -445,9 +481,12 @@ export class GameScene extends Phaser.Scene {
                 if (spriteKey && ['skeleton1', 'skeleton2', 'vampire'].includes(spriteKey)) {
                     attacker.play(`${spriteKey}_attack`, true);
                     attacker.once('animationcomplete', () => {
+                        if (attacker.getData('isDead')) return;
                         attacker.play(`${spriteKey}_idle`, true);
                     });
-                } else if (data.weapon === 'bow') {
+                }
+                
+                if (data.weapon === 'bow') {
                     const bow = this.add.graphics();
                     bow.lineStyle(3, 0x8B4513, 1); // Brown wood
                     bow.beginPath();
@@ -472,7 +511,16 @@ export class GameScene extends Phaser.Scene {
                         yoyo: true,
                         onComplete: () => bow.destroy()
                     });
-                } else {
+                } else if (data.weapon === 'flamethrower') {
+                    const flame = this.add.sprite(attacker.x, attacker.y, 'flame_1');
+                    flame.setScale(2);
+                    flame.setOrigin(0, 0.5); // Pivot at the base so it shoots outward
+                    flame.rotation = data.angle;
+                    flame.play('flame_fire');
+                    flame.once('animationcomplete', () => {
+                        flame.destroy();
+                    });
+                } else if (!spriteKey || !['skeleton1', 'skeleton2', 'vampire'].includes(spriteKey)) {
                     const sword = this.add.graphics();
                     sword.fillStyle(0xcccccc, 1);
                     sword.lineStyle(2, 0x000000, 1);
@@ -604,9 +652,22 @@ export class GameScene extends Phaser.Scene {
         if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
             this.room.send("pickup");
         }
+        
+        const me = this.room.state.players?.get(this.room.sessionId);
+        
+        // Flamethrower continuous fire
+        if (this.input.activePointer.leftButtonDown() && me && me.weaponId === 'flamethrower') {
+            if (_time - this.lastFired > 100) { // Fire every 100ms
+                this.lastFired = _time;
+                const meEntity = this.playerEntities[this.room.sessionId];
+                if (meEntity) {
+                    const angle = Phaser.Math.Angle.Between(meEntity.x, meEntity.y, this.input.activePointer.worldX, this.input.activePointer.worldY);
+                    this.room.send("attack", { angle: angle });
+                }
+            }
+        }
 
         // Handle local input
-        const me = this.room.state.players?.get(this.room.sessionId);
         if (!me || me.health <= 0) {
             const currentPlayer = this.playerEntities[this.room.sessionId];
             if (currentPlayer) currentPlayer.setVelocity(0, 0);
@@ -648,7 +709,7 @@ export class GameScene extends Phaser.Scene {
             if (currentPlayer) {
                 currentPlayer.setVelocity(0, 0);
                 if (['skeleton1', 'skeleton2', 'vampire'].includes(me.sprite)) {
-                    if (currentPlayer.anims.currentAnim?.key !== `${me.sprite}_attack` && currentPlayer.anims.currentAnim?.key !== `${me.sprite}_take_damage`) {
+                    if (!currentPlayer.getData('isDead') && currentPlayer.anims.currentAnim?.key !== `${me.sprite}_attack` && currentPlayer.anims.currentAnim?.key !== `${me.sprite}_take_damage`) {
                         currentPlayer.play(`${me.sprite}_idle`, true);
                     }
                 }

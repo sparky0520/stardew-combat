@@ -10,6 +10,7 @@ export class GameRoom extends Room<any> {
     weaponIdCounter = 0;
     trapIdCounter = 0;
     projectileIdCounter = 0;
+    private lastSpikeHit: Map<string, number> = new Map();
 
     private handlePlayerDeath(targetId: string, target: Player, killerClient?: Client, killerName?: string) {
         if (killerClient && killerName) {
@@ -128,6 +129,30 @@ export class GameRoom extends Room<any> {
                 projectile.type = "arrow";
                 projectile.ownerId = client.sessionId;
                 this.state.projectiles.set(`proj_${this.projectileIdCounter++}`, projectile);
+            } else if (currentWeapon === "flamethrower") {
+                const angle = message.angle || 0;
+                this.state.players.forEach((target: Player, targetId: string) => {
+                    if (targetId !== client.sessionId) {
+                        const dist = Math.sqrt(Math.pow(attacker.x - target.x, 2) + Math.pow(attacker.y - target.y, 2));
+                        if (dist < 120 && target.health > 0 && !target.isImmune) {
+                            let targetAngle = Math.atan2(target.y - attacker.y, target.x - attacker.x);
+                            let angleDiff = targetAngle - angle;
+                            
+                            // Normalize angle diff to -PI to PI
+                            while (angleDiff <= -Math.PI) angleDiff += Math.PI * 2;
+                            while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                            
+                            if (Math.abs(angleDiff) < Math.PI / 4) { // 45 degree half-angle cone
+                                target.health -= 8; // 8 damage per hit (fires rapidly)
+                                this.broadcast("damageTaken", { targetId: targetId, damage: 8, x: target.x, y: target.y });
+                                if (target.health <= 0) {
+                                    attacker.kills += 1;
+                                    this.handlePlayerDeath(targetId, target, client, target.name);
+                                }
+                            }
+                        }
+                    }
+                });
             }
         });
 
@@ -144,26 +169,6 @@ export class GameRoom extends Room<any> {
                         }
                     });
                 }
-
-                // Check spike trap damage
-                this.state.traps.forEach((trap: Trap) => {
-                    if (trap.active && trap.type === "spike") {
-                        this.state.players.forEach((player: Player, sessionId: string) => {
-                            if (player.health > 0 && !player.isImmune) {
-                                const dist = Math.sqrt(Math.pow(player.x - trap.x, 2) + Math.pow(player.y - trap.y, 2));
-                                if (dist < 25) { // 25 pixel radius for stepping on spikes
-                                    player.health -= 15; // DOT or heavy hit
-                                    this.broadcast("damageTaken", { targetId: sessionId, damage: 15, x: player.x, y: player.y });
-                                    
-                                    if (player.health <= 0) {
-                                        this.broadcast("killLog", { message: `${player.name} died to a Spike Trap!` });
-                                        this.handlePlayerDeath(sessionId, player);
-                                    }
-                                }
-                            }
-                        });
-                    }
-                });
                 
             } else {
                 this.state.gameEnded = true;
@@ -172,20 +177,30 @@ export class GameRoom extends Room<any> {
             }
         }, 1000);
 
-        this.weaponSpawnerInterval = setInterval(() => {
-            const maxDrops = Math.max(0, this.state.players.size - 1);
+        const spawnWeapon = () => {
+            const maxDrops = Math.max(2, this.state.players.size); // Always allow at least 2 drops on map
             if (!this.state.gameEnded && this.state.weaponDrops.size < maxDrops) {
                 const drop = new WeaponDrop();
                 const spawn = WEAPON_SPAWNS[Math.floor(Math.random() * WEAPON_SPAWNS.length)];
                 drop.x = spawn.x;
                 drop.y = spawn.y;
-                // Randomly spawn sword or bow
-                const types = ["sword", "bow"];
+                // Randomly spawn sword, bow, or flamethrower
+                const types = ["sword", "bow", "flamethrower"];
                 drop.type = types[Math.floor(Math.random() * types.length)];
-                drop.ammo = drop.type === "sword" ? 10 : 5; // 5 arrows for bow
+                
+                if (drop.type === "sword") drop.ammo = 10;
+                else if (drop.type === "bow") drop.ammo = 5;
+                else if (drop.type === "flamethrower") drop.ammo = 50; // High ammo for rapid fire
+                
                 this.state.weaponDrops.set(`drop_${this.weaponIdCounter++}`, drop);
             }
-        }, 20000); // 20 seconds interval
+        };
+
+        // Spawn initial weapons
+        spawnWeapon();
+        spawnWeapon();
+
+        this.weaponSpawnerInterval = setInterval(spawnWeapon, 15000); // 15 seconds interval
 
         // Fast simulation loop for projectiles
         this.setSimulationInterval((deltaTime) => {
@@ -222,6 +237,30 @@ export class GameRoom extends Room<any> {
                         }
                     }
                 });
+            });
+
+            // Instant trap collision detection
+            this.state.traps.forEach((trap: Trap) => {
+                if (trap.active && trap.type === "spike") {
+                    this.state.players.forEach((player: Player, sessionId: string) => {
+                        if (player.health > 0 && !player.isImmune) {
+                            const dist = Math.sqrt(Math.pow(player.x - trap.x, 2) + Math.pow(player.y - trap.y, 2));
+                            if (dist < 25) {
+                                const lastHit = this.lastSpikeHit.get(sessionId) || 0;
+                                if (Date.now() - lastHit > 1000) { // 1 second cooldown
+                                    this.lastSpikeHit.set(sessionId, Date.now());
+                                    player.health -= 15;
+                                    this.broadcast("damageTaken", { targetId: sessionId, damage: 15, x: player.x, y: player.y });
+                                    
+                                    if (player.health <= 0) {
+                                        this.broadcast("killLog", { message: `${player.name} died to a Spike Trap!` });
+                                        this.handlePlayerDeath(sessionId, player);
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
             });
         });
     }
