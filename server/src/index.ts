@@ -25,7 +25,8 @@ app.get("/rooms", async (req, res) => {
 const clientDistPath = path.join(__dirname, "../../client/dist");
 app.use(express.static(clientDistPath));
 
-app.get("*", (req, res) => {
+// Express 5 requires named parameters or regex for wildcards instead of just '*'
+app.get(/(.*)/, (req, res) => {
     res.sendFile(path.join(clientDistPath, "index.html"));
 });
 
