@@ -420,7 +420,9 @@ export class GameScene extends Phaser.Scene {
             if (entity) {
                 entity.play('chest_open');
                 entity.once('animationcomplete', () => {
-                    entity.destroy();
+                    this.time.delayedCall(2000, () => {
+                        if (entity) entity.destroy();
+                    });
                 });
                 delete this.weaponDropEntities[dropId];
             }
