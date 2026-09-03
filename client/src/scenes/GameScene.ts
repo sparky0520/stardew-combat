@@ -9,6 +9,7 @@ export class GameScene extends Phaser.Scene {
     private playerEntities: { [sessionId: string]: Phaser.Physics.Arcade.Sprite } = {};
     private weaponDropEntities: { [id: string]: Phaser.GameObjects.Sprite } = {};
     private trapEntities: { [id: string]: Phaser.GameObjects.Sprite } = {};
+    private projectileEntities: { [id: string]: Phaser.GameObjects.Sprite } = {};
     private nameTexts: { [sessionId: string]: Phaser.GameObjects.Text } = {};
     private healthBars: { [sessionId: string]: Phaser.GameObjects.Graphics } = {};
     private wallLayer!: Phaser.Tilemaps.TilemapLayer;
@@ -53,6 +54,8 @@ export class GameScene extends Phaser.Scene {
         for (let i = 1; i <= 4; i++) {
             this.load.image(`trap_peaks_${i}`, `assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/peaks/peaks_${i}.png`);
         }
+
+        this.load.image('arrow', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/arrow/Just_arrow.png');
     }
 
     async create() {
@@ -332,6 +335,27 @@ export class GameScene extends Phaser.Scene {
             }
         });
 
+        // Listen for Projectiles
+        callbacks.onAdd("projectiles", (proj: any, projId: string) => {
+            const entity = this.add.sprite(proj.x, proj.y, 'arrow');
+            entity.setScale(1.5);
+            entity.setDepth(2);
+            entity.setRotation(proj.angle); // Point in the direction of travel
+            this.projectileEntities[projId] = entity;
+            
+            proj.onChange = (changes: any) => {
+                entity.setPosition(proj.x, proj.y);
+            };
+        });
+
+        callbacks.onRemove("projectiles", (proj: any, projId: string) => {
+            const entity = this.projectileEntities[projId];
+            if (entity) {
+                entity.destroy();
+                delete this.projectileEntities[projId];
+            }
+        });
+
         // Listen for game state changes (timer/kills/movement)
         this.room.onStateChange((state) => {
             state.players.forEach((player: Player, sessionId: string) => {
@@ -515,7 +539,13 @@ export class GameScene extends Phaser.Scene {
     private setupInputEvents() {
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
             if (pointer.leftButtonDown() && this.room) {
-                this.room.send("attack");
+                const meEntity = this.playerEntities[this.room.sessionId];
+                if (meEntity) {
+                    const angle = Phaser.Math.Angle.Between(meEntity.x, meEntity.y, pointer.worldX, pointer.worldY);
+                    this.room.send("attack", { angle: angle });
+                } else {
+                    this.room.send("attack", { angle: 0 });
+                }
             }
         });
     }

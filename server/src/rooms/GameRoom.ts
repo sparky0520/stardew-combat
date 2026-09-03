@@ -1,5 +1,5 @@
 import { Room, Client } from "colyseus";
-import { GameState, Player, WeaponDrop, Trap } from "../schema/GameState";
+import { GameState, Player, WeaponDrop, Trap, Projectile } from "../schema/GameState";
 import { MapSchema } from "@colyseus/schema";
 import { PLAYER_SPAWNS, WEAPON_SPAWNS, TRAP_SPAWNS } from "../shared/mapConfig";
 
@@ -9,6 +9,7 @@ export class GameRoom extends Room<any> {
     weaponSpawnerInterval: NodeJS.Timeout | null = null;
     weaponIdCounter = 0;
     trapIdCounter = 0;
+    projectileIdCounter = 0;
 
     private handlePlayerDeath(targetId: string, target: Player, killerClient?: Client, killerName?: string) {
         if (killerClient && killerName) {
@@ -44,6 +45,7 @@ export class GameRoom extends Room<any> {
         state.players = new MapSchema<Player>();
         state.weaponDrops = new MapSchema<WeaponDrop>();
         state.traps = new MapSchema<Trap>();
+        state.projectiles = new MapSchema<Projectile>();
         state.timeLeft = 300;
         state.gameEnded = false;
         this.setState(state);
@@ -95,25 +97,38 @@ export class GameRoom extends Room<any> {
             if (!attacker || this.state.gameEnded || attacker.ammo <= 0 || attacker.weaponId === "") return;
 
             attacker.ammo -= 1;
+            const currentWeapon = attacker.weaponId;
+            
             if (attacker.ammo <= 0) {
                 attacker.weaponId = "";
             }
 
             this.broadcast("playerAttacked", { playerId: client.sessionId });
             
-            this.state.players.forEach((target: Player, targetId: string) => {
-                if (targetId !== client.sessionId) {
-                    const dist = Math.sqrt(Math.pow(attacker.x - target.x, 2) + Math.pow(attacker.y - target.y, 2));
-                    if (dist < 60 && target.health > 0 && !target.isImmune) {
-                        target.health -= 25;
-                        this.broadcast("damageTaken", { targetId: targetId, damage: 25, x: target.x, y: target.y });
-                        if (target.health <= 0) {
-                            attacker.kills += 1;
-                            this.handlePlayerDeath(targetId, target, client, target.name);
+            if (currentWeapon === "sword") {
+                this.state.players.forEach((target: Player, targetId: string) => {
+                    if (targetId !== client.sessionId) {
+                        const dist = Math.sqrt(Math.pow(attacker.x - target.x, 2) + Math.pow(attacker.y - target.y, 2));
+                        if (dist < 60 && target.health > 0 && !target.isImmune) {
+                            target.health -= 25;
+                            this.broadcast("damageTaken", { targetId: targetId, damage: 25, x: target.x, y: target.y });
+                            if (target.health <= 0) {
+                                attacker.kills += 1;
+                                this.handlePlayerDeath(targetId, target, client, target.name);
+                            }
                         }
                     }
-                }
-            });
+                });
+            } else if (currentWeapon === "bow") {
+                const angle = message.angle || 0;
+                const projectile = new Projectile();
+                projectile.x = attacker.x;
+                projectile.y = attacker.y;
+                projectile.angle = angle;
+                projectile.type = "arrow";
+                projectile.ownerId = client.sessionId;
+                this.state.projectiles.set(`proj_${this.projectileIdCounter++}`, projectile);
+            }
         });
 
         // Start game timer and Trap logic
@@ -164,11 +179,51 @@ export class GameRoom extends Room<any> {
                 const spawn = WEAPON_SPAWNS[Math.floor(Math.random() * WEAPON_SPAWNS.length)];
                 drop.x = spawn.x;
                 drop.y = spawn.y;
-                drop.type = "sword";
-                drop.ammo = 10;
+                // Randomly spawn sword or bow
+                const types = ["sword", "bow"];
+                drop.type = types[Math.floor(Math.random() * types.length)];
+                drop.ammo = drop.type === "sword" ? 10 : 5; // 5 arrows for bow
                 this.state.weaponDrops.set(`drop_${this.weaponIdCounter++}`, drop);
             }
         }, 20000); // 20 seconds interval
+
+        // Fast simulation loop for projectiles
+        this.setSimulationInterval((deltaTime) => {
+            if (this.state.gameEnded) return;
+
+            const SPEED = 400; // pixels per second
+            const distance = (SPEED * deltaTime) / 1000;
+            const MAP_SIZE = 1280;
+
+            this.state.projectiles.forEach((proj: Projectile, projId: string) => {
+                proj.x += Math.cos(proj.angle) * distance;
+                proj.y += Math.sin(proj.angle) * distance;
+
+                if (proj.x < 0 || proj.x > MAP_SIZE || proj.y < 0 || proj.y > MAP_SIZE) {
+                    this.state.projectiles.delete(projId);
+                    return;
+                }
+
+                let hit = false;
+                this.state.players.forEach((player: Player, playerId: string) => {
+                    if (!hit && playerId !== proj.ownerId && player.health > 0 && !player.isImmune) {
+                        const dist = Math.sqrt(Math.pow(player.x - proj.x, 2) + Math.pow(player.y - proj.y, 2));
+                        if (dist < 20) { // Arrow hit radius
+                            hit = true;
+                            player.health -= 20; // Arrow damage
+                            this.broadcast("damageTaken", { targetId: playerId, damage: 20, x: player.x, y: player.y });
+                            if (player.health <= 0) {
+                                const owner = this.state.players.get(proj.ownerId);
+                                if (owner) owner.kills += 1;
+                                const ownerClient = this.clients.find(c => c.sessionId === proj.ownerId);
+                                this.handlePlayerDeath(playerId, player, ownerClient, player.name);
+                            }
+                            this.state.projectiles.delete(projId);
+                        }
+                    }
+                });
+            });
+        });
     }
 
     onJoin(client: Client, options: any) {
