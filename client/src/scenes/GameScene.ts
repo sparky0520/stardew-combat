@@ -101,12 +101,19 @@ export class GameScene extends Phaser.Scene {
             });
         });
 
+        const enemyFrames: { [key: string]: { idle: number, movement: number, attack: number, damage: number } } = {
+            'skeleton1': { idle: 6, movement: 10, attack: 9, damage: 5 },
+            'skeleton2': { idle: 6, movement: 10, attack: 15, damage: 5 },
+            'vampire': { idle: 6, movement: 8, attack: 16, damage: 5 }
+        };
+
         const newEnemies = ['skeleton1', 'skeleton2', 'vampire'];
         newEnemies.forEach(sprite => {
-            this.anims.create({ key: `${sprite}_idle`, frames: this.anims.generateFrameNumbers(`${sprite}_idle`, { start: 0, end: 5 }), frameRate: 8, repeat: -1 });
-            this.anims.create({ key: `${sprite}_movement`, frames: this.anims.generateFrameNumbers(`${sprite}_movement`, { start: 0, end: 9 }), frameRate: 12, repeat: -1 });
-            this.anims.create({ key: `${sprite}_attack`, frames: this.anims.generateFrameNumbers(`${sprite}_attack`, { start: 0, end: 8 }), frameRate: 15, repeat: 0 });
-            this.anims.create({ key: `${sprite}_take_damage`, frames: this.anims.generateFrameNumbers(`${sprite}_take_damage`, { start: 0, end: 4 }), frameRate: 12, repeat: 0 });
+            const f = enemyFrames[sprite];
+            this.anims.create({ key: `${sprite}_idle`, frames: this.anims.generateFrameNumbers(`${sprite}_idle`, { start: 0, end: f.idle - 1 }), frameRate: 8, repeat: -1 });
+            this.anims.create({ key: `${sprite}_movement`, frames: this.anims.generateFrameNumbers(`${sprite}_movement`, { start: 0, end: f.movement - 1 }), frameRate: 12, repeat: -1 });
+            this.anims.create({ key: `${sprite}_attack`, frames: this.anims.generateFrameNumbers(`${sprite}_attack`, { start: 0, end: f.attack - 1 }), frameRate: 15, repeat: 0 });
+            this.anims.create({ key: `${sprite}_take_damage`, frames: this.anims.generateFrameNumbers(`${sprite}_take_damage`, { start: 0, end: f.damage - 1 }), frameRate: 12, repeat: 0 });
         });
 
         // Connect to the local Colyseus server
