@@ -300,19 +300,19 @@
       cursorImg.src = 'assets/dungeon/2D Pixel Dungeon Asset Pack/interface/arrow_1.png';
       cursorImg.onload = () => {
         const canvas = document.createElement('canvas');
-        canvas.width = 32;
-        canvas.height = 32;
+        canvas.width = 48;
+        canvas.height = 48;
         const ctx = canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false; // keep it pixelated
         
-        ctx.translate(16, 16);
+        ctx.translate(24, 24);
         // Assuming arrow_1 points down, rotate 135 degrees to point top-left
         ctx.rotate((135 * Math.PI) / 180);
-        // Draw image scaled up to 32x32
-        ctx.drawImage(cursorImg, -16, -16, 32, 32); 
+        // Draw image scaled up to 48x48
+        ctx.drawImage(cursorImg, -24, -24, 48, 48); 
         
         const dataURL = canvas.toDataURL();
-        document.body.style.cursor = `url('${dataURL}') 4 4, auto`; // 4,4 as hotspot
+        document.body.style.cursor = `url('${dataURL}') 6 6, auto`; // 6,6 as hotspot
       };
     </script>
     <script type="module" src="/src/main.ts"></script>
