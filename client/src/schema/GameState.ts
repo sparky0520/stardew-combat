@@ -8,7 +8,8 @@ export const Player = schema({
     weaponId: t.string(),
     ammo: t.number(),
     name: t.string(),
-    sprite: t.string()
+    sprite: t.string(),
+    isImmune: t.boolean()
 }, "Player");
 export type Player = SchemaType<typeof Player>;
 

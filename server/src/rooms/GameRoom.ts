@@ -47,6 +47,7 @@ export class GameRoom extends Room<any> {
                 player.weaponId = drop.type;
                 player.ammo = drop.ammo;
                 this.state.weaponDrops.delete(closestDropId);
+                this.broadcast("weaponTaken", { name: player.name });
             }
         });
 
@@ -55,12 +56,15 @@ export class GameRoom extends Room<any> {
             if (!attacker || this.state.gameEnded || attacker.ammo <= 0 || attacker.weaponId === "") return;
 
             attacker.ammo -= 1;
+            if (attacker.ammo <= 0) {
+                attacker.weaponId = "";
+            }
             
             // Basic combat: hit any player within 60 units (Zelda sword style)
             this.state.players.forEach((target: Player, targetId: string) => {
                 if (targetId !== client.sessionId) {
                     const dist = Math.sqrt(Math.pow(attacker.x - target.x, 2) + Math.pow(attacker.y - target.y, 2));
-                    if (dist < 60 && target.health > 0) {
+                    if (dist < 60 && target.health > 0 && !target.isImmune) {
                         target.health -= 25;
                         if (target.health <= 0) {
                             attacker.kills += 1;
@@ -74,6 +78,18 @@ export class GameRoom extends Room<any> {
                                     p.health = 100;
                                     p.x = Math.random() * 1200;
                                     p.y = Math.random() * 1200;
+                                    p.isImmune = true;
+                                    
+                                    const targetClient = this.clients.find(c => c.sessionId === targetId);
+                                    if (targetClient) {
+                                        targetClient.send("respawn", { x: p.x, y: p.y });
+                                    }
+
+                                    setTimeout(() => {
+                                        if (this.state.players.has(targetId)) {
+                                            this.state.players.get(targetId)!.isImmune = false;
+                                        }
+                                    }, 5000);
                                 }
                             }, 3000);
                         }
@@ -94,8 +110,8 @@ export class GameRoom extends Room<any> {
         }, 1000);
 
         this.weaponSpawnerInterval = setInterval(() => {
-            // Scarce weapon drops: max 3 on the map at once
-            if (!this.state.gameEnded && this.state.weaponDrops.size < 3) {
+            const maxDrops = Math.max(0, this.state.players.size - 1);
+            if (!this.state.gameEnded && this.state.weaponDrops.size < maxDrops) {
                 const drop = new WeaponDrop();
                 drop.x = Math.random() * 1200;
                 drop.y = Math.random() * 1200;
@@ -118,7 +134,14 @@ export class GameRoom extends Room<any> {
         player.ammo = 0;
         player.name = options.name || "Unknown";
         player.sprite = options.sprite || "priest1";
+        player.isImmune = true;
         this.state.players.set(client.sessionId, player);
+
+        setTimeout(() => {
+            if (this.state.players.has(client.sessionId)) {
+                this.state.players.get(client.sessionId)!.isImmune = false;
+            }
+        }, 5000);
     }
 
     onLeave(client: Client, code?: number) {

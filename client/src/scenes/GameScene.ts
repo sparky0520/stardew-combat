@@ -8,6 +8,7 @@ export class GameScene extends Phaser.Scene {
     private playerEntities: { [sessionId: string]: Phaser.Physics.Arcade.Sprite } = {};
     private weaponDropEntities: { [id: string]: Phaser.GameObjects.Sprite } = {};
     private nameTexts: { [sessionId: string]: Phaser.GameObjects.Text } = {};
+    private healthBars: { [sessionId: string]: Phaser.GameObjects.Graphics } = {};
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
     private spaceKey!: Phaser.Input.Keyboard.Key;
     private tabKey!: Phaser.Input.Keyboard.Key;
@@ -135,6 +136,14 @@ export class GameScene extends Phaser.Scene {
                     strokeThickness: 2
                 }).setOrigin(0.5, 0.5);
                 this.nameTexts[sessionId] = text;
+                
+                const hpBar = this.add.graphics();
+                hpBar.setPosition(player.x, player.y - 18);
+                hpBar.fillStyle(0xff0000);
+                hpBar.fillRect(-15, 0, 30, 4);
+                hpBar.fillStyle(0x00ff00);
+                hpBar.fillRect(-15, 0, 30 * (player.health / 100), 4);
+                this.healthBars[sessionId] = hpBar;
             }
             
             this.playerEntities[sessionId] = entity;
@@ -152,6 +161,11 @@ export class GameScene extends Phaser.Scene {
                 text.destroy();
                 delete this.nameTexts[sessionId];
             }
+            const hpBar = this.healthBars[sessionId];
+            if (hpBar) {
+                hpBar.destroy();
+                delete this.healthBars[sessionId];
+            }
         });
 
         // Listen for weapon drops
@@ -165,11 +179,32 @@ export class GameScene extends Phaser.Scene {
             const logger = document.getElementById('drop-logger');
             if (logger) {
                 logger.innerText = `A weapon drop has spawned!`;
+                logger.style.color = '#55ff55';
                 logger.style.opacity = '1';
                 clearTimeout(dropLogTimeout);
                 dropLogTimeout = setTimeout(() => {
                     logger.style.opacity = '0';
                 }, 3000);
+            }
+        });
+
+        this.room.onMessage("weaponTaken", (data) => {
+            const logger = document.getElementById('drop-logger');
+            if (logger) {
+                logger.innerText = `Weapons cache was taken by ${data.name}!`;
+                logger.style.color = '#ffaa00'; // Make it golden to stand out
+                logger.style.opacity = '1';
+                clearTimeout(dropLogTimeout);
+                dropLogTimeout = setTimeout(() => {
+                    logger.style.opacity = '0';
+                }, 3000);
+            }
+        });
+
+        this.room.onMessage("respawn", (data) => {
+            const meEntity = this.playerEntities[this.room.sessionId];
+            if (meEntity) {
+                meEntity.setPosition(data.x, data.y);
             }
         });
 
@@ -185,21 +220,44 @@ export class GameScene extends Phaser.Scene {
         this.room.onStateChange((state) => {
             state.players.forEach((player: Player, sessionId: string) => {
                 const entity = this.playerEntities[sessionId];
-                if (entity && sessionId !== this.room.sessionId) {
-                    this.tweens.add({
-                        targets: entity,
-                        x: player.x,
-                        y: player.y,
-                        duration: 50
-                    });
-                    const text = this.nameTexts[sessionId];
-                    if (text) {
+                if (entity) {
+                    if (sessionId !== this.room.sessionId) {
                         this.tweens.add({
-                            targets: text,
+                            targets: entity,
                             x: player.x,
-                            y: player.y - 30,
+                            y: player.y,
                             duration: 50
                         });
+                        const text = this.nameTexts[sessionId];
+                        if (text) {
+                            this.tweens.add({
+                                targets: text,
+                                x: player.x,
+                                y: player.y - 30,
+                                duration: 50
+                            });
+                        }
+                        const hpBar = this.healthBars[sessionId];
+                        if (hpBar) {
+                            this.tweens.add({
+                                targets: hpBar,
+                                x: player.x,
+                                y: player.y - 18,
+                                duration: 50
+                            });
+                            hpBar.clear();
+                            hpBar.fillStyle(0xff0000);
+                            hpBar.fillRect(-15, 0, 30, 4);
+                            hpBar.fillStyle(0x00ff00);
+                            hpBar.fillRect(-15, 0, 30 * Math.max(0, player.health) / 100, 4);
+                        }
+                    }
+                    
+                    // Visually indicate immunity
+                    if (player.isImmune) {
+                        entity.setAlpha(0.5);
+                    } else {
+                        entity.setAlpha(1);
                     }
                 }
             });
