@@ -308,23 +308,11 @@ export class GameScene extends Phaser.Scene {
             }
         });
 
-        // Listen for Traps
         callbacks.onAdd("traps", (trap: any, trapId: string) => {
             const entity = this.add.sprite(trap.x, trap.y, 'trap_peaks_1');
             entity.setScale(2);
             entity.setDepth(0); // Render floor-level
             this.trapEntities[trapId] = entity;
-            
-            trap.onChange = (changes: any) => {
-                if (trap.active) {
-                    entity.play('peaks_trigger');
-                    entity.setTint(0xff5555); // Red tint to scream DANGER
-                } else {
-                    entity.stop();
-                    entity.setTexture('trap_peaks_1');
-                    entity.clearTint();
-                }
-            };
         });
 
         callbacks.onRemove("traps", (trap: any, trapId: string) => {
@@ -340,12 +328,8 @@ export class GameScene extends Phaser.Scene {
             const entity = this.add.sprite(proj.x, proj.y, 'arrow');
             entity.setScale(1.5);
             entity.setDepth(2);
-            entity.setRotation(proj.angle); // Point in the direction of travel
+            entity.setRotation(proj.angle - Math.PI / 2); // Offset by -90deg
             this.projectileEntities[projId] = entity;
-            
-            proj.onChange = (changes: any) => {
-                entity.setPosition(proj.x, proj.y);
-            };
         });
 
         callbacks.onRemove("projectiles", (proj: any, projId: string) => {
@@ -416,6 +400,36 @@ export class GameScene extends Phaser.Scene {
                     }
                 }
             });
+
+            // Update projectiles
+            state.projectiles?.forEach((proj: any, projId: string) => {
+                const entity = this.projectileEntities[projId];
+                if (entity) {
+                    entity.setPosition(proj.x, proj.y);
+                }
+            });
+
+            // Update traps
+            state.traps?.forEach((trap: any, trapId: string) => {
+                const entity = this.trapEntities[trapId];
+                if (entity) {
+                    const isActive = trap.active;
+                    const isPlayingAnim = entity.anims && entity.anims.isPlaying && entity.anims.currentAnim?.key === 'peaks_trigger';
+                    
+                    if (isActive && !isPlayingAnim) {
+                        entity.play('peaks_trigger');
+                        entity.setTint(0xff5555);
+                    } else if (!isActive && isPlayingAnim) {
+                        entity.stop();
+                        entity.setTexture('trap_peaks_1');
+                        entity.clearTint();
+                    } else if (!isActive && entity.texture?.key !== 'trap_peaks_1') {
+                        entity.setTexture('trap_peaks_1');
+                        entity.clearTint();
+                    }
+                }
+            });
+
             this.updateUI();
         });
         
