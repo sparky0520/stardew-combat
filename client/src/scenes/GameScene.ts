@@ -469,7 +469,7 @@ export class GameScene extends Phaser.Scene {
         });
         
         this.room.onMessage("gameOver", (winner: any) => {
-            document.getElementById('timer')!.innerText = `Game Over! Winner: ${winner.sessionId} with ${winner.kills} kills`;
+            document.getElementById('game-message')!.innerText = `Game Over! Winner: ${winner.sessionId} with ${winner.kills} kills`;
         });
 
         this.room.onMessage("playerAttacked", (data) => {
@@ -601,13 +601,25 @@ export class GameScene extends Phaser.Scene {
             }
         }
         
-        const timerEl = document.getElementById('timer');
-        if (timerEl) {
-            let uiText = `Time Left: ${this.room.state.timeLeft}s`;
-            if (me) {
-                uiText += ` | Health: ${me.health} | Weapon: ${me.weaponId || 'None'} | Ammo: ${me.ammo}`;
+        const timeBoxEl = document.getElementById('time-box');
+        if (timeBoxEl) {
+            const time = this.room.state.timeLeft;
+            const minutes = Math.floor(time / 60);
+            const seconds = time % 60;
+            if (minutes > 0) {
+                timeBoxEl.innerText = `Time Left: ${minutes} min ${seconds} sec`;
+            } else {
+                timeBoxEl.innerText = `Time Left: ${seconds} sec`;
             }
-            timerEl.innerText = uiText;
+        }
+
+        const hudEl = document.getElementById('hud-box');
+        if (hudEl) {
+            let uiText = '';
+            if (me) {
+                uiText = `Health: ${me.health}<br/>Weapon: ${me.weaponId || 'None'}<br/>Ammo: ${me.ammo}`;
+            }
+            hudEl.innerHTML = uiText;
         }
         
         const scoreboardEl = document.getElementById('scoreboard');

@@ -10,20 +10,57 @@
       }
       canvas { display: block; image-rendering: pixelated; }
       #ui-layer {
-
         position: absolute;
         top: 0;
         left: 0;
         width: 100%;
+        height: 100%;
         pointer-events: none;
-        color: white;
-        padding: 10px;
-        box-sizing: border-box;
-        text-shadow: 1px 1px 2px black;
         display: none; /* Hidden until joined */
         z-index: 10;
       }
-      #timer { font-size: 24px; font-weight: bold; text-align: center; }
+      #hud-box {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.8);
+        border: 10px solid transparent;
+        border-image: url('assets/dungeon/2D Pixel Dungeon Asset Pack/interface/square_up_down_2.png') 16 stretch;
+        image-rendering: pixelated;
+        padding: 15px;
+        color: white;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 18px;
+        font-weight: bold;
+        text-shadow: 1px 1px 2px black;
+        text-align: right;
+      }
+      #time-box {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        background: rgba(0, 0, 0, 0.8);
+        border: 10px solid transparent;
+        border-image: url('assets/dungeon/2D Pixel Dungeon Asset Pack/interface/square_up_down_2.png') 16 stretch;
+        image-rendering: pixelated;
+        padding: 15px;
+        color: white;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 18px;
+        font-weight: bold;
+        text-shadow: 1px 1px 2px black;
+        text-align: left;
+      }
+      #game-message { 
+        position: absolute;
+        top: 80px;
+        width: 100%;
+        text-align: center;
+        font-size: 32px; 
+        font-weight: bold; 
+        color: white;
+        text-shadow: 2px 2px 4px black;
+      }
       #scoreboard { 
         position: absolute; 
         top: 50%; 
@@ -223,7 +260,9 @@
     <div id="drop-logger"></div>
     <div id="scoreboard"></div>
     <div id="ui-layer">
-      <div id="timer">Waiting for players...</div>
+      <div id="game-message"></div>
+      <div id="time-box">Waiting for players...</div>
+      <div id="hud-box"></div>
     </div>
     <div id="app"></div>
     
