@@ -11,6 +11,9 @@ document.getElementById('join-btn')?.addEventListener('click', () => {
     document.getElementById('app')!.style.display = 'block';
     document.getElementById('ui-layer')!.style.display = 'block';
 
+    // Set to true to see pink collision bounding boxes for all sprites
+    const ENABLE_PHYSICS_DEBUG = false;
+
     const config: Phaser.Types.Core.GameConfig = {
         type: Phaser.AUTO,
         parent: 'app',
@@ -25,7 +28,7 @@ document.getElementById('join-btn')?.addEventListener('click', () => {
             default: 'arcade',
             arcade: {
                 gravity: { x: 0, y: 0 },
-                debug: true
+                debug: ENABLE_PHYSICS_DEBUG
             }
         },
         scene: [GameScene]
