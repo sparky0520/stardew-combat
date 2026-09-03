@@ -16,6 +16,9 @@ export class GameScene extends Phaser.Scene {
     private wallLayer!: Phaser.Tilemaps.TilemapLayer;
     private lastFired: number = 0;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+    private wasd!: any;
+    private isDashing: boolean = false;
+    private lastDashTime: number = 0;
     private spaceKey!: Phaser.Input.Keyboard.Key;
     private tabKey!: Phaser.Input.Keyboard.Key;
     private playerName!: string;
@@ -135,7 +138,25 @@ export class GameScene extends Phaser.Scene {
             overlay.setVisible(isVisible);
         });
 
+        this.input.gamepad?.on('down', (_pad: Phaser.Input.Gamepad.Gamepad, button: Phaser.Input.Gamepad.Button, _value: number) => {
+            if (button.index === 2 || button.index === 9) { // X or Start
+                const isVisible = !minimap.visible;
+                minimap.setVisible(isVisible);
+                overlay.setVisible(isVisible);
+            }
+            if (button.index === 3 || button.index === 8) { // Y or Select
+                const scoreboardEl = document.getElementById('scoreboard');
+                const darkOverlayEl = document.getElementById('dark-overlay');
+                if (scoreboardEl && darkOverlayEl) {
+                    const isVisible = scoreboardEl.style.display === 'block';
+                    scoreboardEl.style.display = isVisible ? 'none' : 'block';
+                    darkOverlayEl.style.display = isVisible ? 'none' : 'block';
+                }
+            }
+        });
+
         this.cursors = this.input.keyboard!.createCursorKeys();
+        this.wasd = this.input.keyboard!.addKeys('W,A,S,D');
         this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
         this.tabKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.TAB);
         
@@ -1030,7 +1051,49 @@ export class GameScene extends Phaser.Scene {
             
             if (closestDropId && !this.isChanneling) {
                 this.startChanneling(closestDropId);
+            } else if (!this.isChanneling) {
+                // Dash
+                if (_time - this.lastDashTime > 1000) {
+                    this.isDashing = true;
+                    this.lastDashTime = _time;
+                    setTimeout(() => {
+                        this.isDashing = false;
+                    }, 200);
+                }
             }
+        }
+        
+        // Gamepad pickup/dash (button A / B)
+        const pad = this.input.gamepad?.pad1;
+        if (pad && pad.A && !(pad as any).prevA) {
+            (pad as any).prevA = true;
+            let closestDropId = "";
+            let minDistance = 100;
+            const player = this.playerEntities[this.room.sessionId];
+            
+            if (player && this.room.state.weaponDrops) {
+                this.room.state.weaponDrops.forEach((drop: any, dropId: string) => {
+                    const dist = Math.sqrt(Math.pow(player.x - drop.x, 2) + Math.pow(player.y - drop.y, 2));
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        closestDropId = dropId;
+                    }
+                });
+            }
+            if (closestDropId && !this.isChanneling) {
+                this.startChanneling(closestDropId);
+            } else if (!this.isChanneling) {
+                // Dash
+                if (_time - this.lastDashTime > 1000) {
+                    this.isDashing = true;
+                    this.lastDashTime = _time;
+                    setTimeout(() => {
+                        this.isDashing = false;
+                    }, 200);
+                }
+            }
+        } else if (pad && !pad.A) {
+            (pad as any).prevA = false;
         }
         
         const me = this.room.state.players?.get(this.room.sessionId);
@@ -1054,14 +1117,39 @@ export class GameScene extends Phaser.Scene {
             return;
         }
 
-        const speed = 200;
+        let speed = this.isDashing ? 600 : 200;
         let dx = 0;
         let dy = 0;
 
-        if (this.cursors.left.isDown) dx -= 1;
-        if (this.cursors.right.isDown) dx += 1;
-        if (this.cursors.up.isDown) dy -= 1;
-        if (this.cursors.down.isDown) dy += 1;
+        if (this.cursors.left.isDown || this.wasd.A.isDown) dx -= 1;
+        if (this.cursors.right.isDown || this.wasd.D.isDown) dx += 1;
+        if (this.cursors.up.isDown || this.wasd.W.isDown) dy -= 1;
+        if (this.cursors.down.isDown || this.wasd.S.isDown) dy += 1;
+        
+        if (pad) {
+            const lx = pad.axes.length > 0 ? pad.axes[0].getValue() : 0;
+            const ly = pad.axes.length > 1 ? pad.axes[1].getValue() : 0;
+            if (Math.abs(lx) > 0.1) dx += lx;
+            if (Math.abs(ly) > 0.1) dy += ly;
+            
+            // Gamepad attack
+            const rx = pad.axes.length > 2 ? pad.axes[2].getValue() : 0;
+            const ry = pad.axes.length > 3 ? pad.axes[3].getValue() : 0;
+            const trigger = pad.R2;
+            
+            if ((Math.abs(rx) > 0.5 || Math.abs(ry) > 0.5 || trigger > 0.5) && me) {
+                if (_time - this.lastFired > (me.weaponId === 'flamethrower' ? 100 : 500)) {
+                    this.lastFired = _time;
+                    const meEntity = this.playerEntities[this.room.sessionId];
+                    if (meEntity) {
+                        const angle = Math.atan2(ry, rx);
+                        const targetX = meEntity.x + Math.cos(angle) * 100;
+                        const targetY = meEntity.y + Math.sin(angle) * 100;
+                        this.room.send("attack", { angle: angle, targetX: targetX, targetY: targetY });
+                    }
+                }
+            }
+        }
 
         if (dx !== 0 || dy !== 0) {
             if (this.isChanneling) {

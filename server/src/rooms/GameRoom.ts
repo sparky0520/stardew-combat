@@ -303,7 +303,7 @@ export class GameRoom extends Room<any> {
                     }
                 }
             });
-        }, 2500); // Fireballs every 2.5 seconds
+        }, 10000); // Fireballs every 10 seconds
 
         // Fast simulation loop for projectiles
         this.setSimulationInterval((deltaTime) => {
@@ -327,11 +327,15 @@ export class GameRoom extends Room<any> {
                 });
             });
 
-            const SPEED = 400; // pixels per second
-            const distance = (SPEED * deltaTime) / 1000;
             const MAP_SIZE = 1280;
 
             this.state.projectiles.forEach((proj: Projectile, projId: string) => {
+                let currentSpeed = 400; // pixels per second
+                if (proj.type === "fireball" && proj.ownerId === "environment") {
+                    currentSpeed = 200;
+                }
+                const distance = (currentSpeed * deltaTime) / 1000;
+
                 if (proj.type === "flask") {
                     const target = this.flaskTargets.get(projId);
                     if (target) {

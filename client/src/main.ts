@@ -20,6 +20,7 @@ function startGame(playerName: string, roomNumber: string, playerSprite: string)
             autoCenter: Phaser.Scale.CENTER_BOTH
         },
         pixelArt: true,
+        input: { gamepad: true },
         physics: {
             default: 'arcade',
             arcade: {
