@@ -11,6 +11,7 @@ export class GameScene extends Phaser.Scene {
     private nameTexts: { [sessionId: string]: Phaser.GameObjects.Text } = {};
     private healthBars: { [sessionId: string]: Phaser.GameObjects.Graphics } = {};
     private wallLayer!: Phaser.Tilemaps.TilemapLayer;
+    private wallColliders!: Phaser.Physics.Arcade.StaticGroup;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
     private spaceKey!: Phaser.Input.Keyboard.Key;
     private tabKey!: Phaser.Input.Keyboard.Key;
@@ -64,8 +65,21 @@ export class GameScene extends Phaser.Scene {
         if (tileset) {
             this.wallLayer = map.createLayer(0, tileset, 0, 0) as Phaser.Tilemaps.TilemapLayer;
             this.wallLayer.setScale(SCALE);
-            this.wallLayer.setCollision(TILE_WALL);
+            // We intentionally do not use setCollision on wallLayer because it includes invisible padding.
         }
+
+        // Create custom tight collision bounds for walls
+        this.wallColliders = this.physics.add.staticGroup();
+        this.wallLayer.forEachTile(tile => {
+            if (tile.index === TILE_WALL) {
+                const px = tile.pixelX * SCALE;
+                const py = tile.pixelY * SCALE;
+                // Wall is 32x32 scaled. We make the collision box only the top 16px to remove bottom padding.
+                const zone = this.add.zone(px + 16, py + 8, 32, 16);
+                this.physics.add.existing(zone, true);
+                this.wallColliders.add(zone);
+            }
+        });
 
         // Setup Minimap (Top Left corner)
         const minimap = this.cameras.add(10, 50, 200, 200).setZoom(0.4).setName('mini');
@@ -161,8 +175,8 @@ export class GameScene extends Phaser.Scene {
             entity.setCollideWorldBounds(true);
             entity.play(`${spriteKey}_idle`);
             
-            if (this.wallLayer) {
-                this.physics.add.collider(entity, this.wallLayer);
+            if (this.wallColliders) {
+                this.physics.add.collider(entity, this.wallColliders);
             }
             
             if (isCurrentPlayer) {
