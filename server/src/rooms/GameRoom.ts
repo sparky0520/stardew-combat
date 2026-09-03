@@ -1,6 +1,7 @@
 import { Room, Client } from "colyseus";
 import { GameState, Player, WeaponDrop } from "../schema/GameState";
 import { MapSchema } from "@colyseus/schema";
+import { PLAYER_SPAWNS, WEAPON_SPAWNS } from "../shared/mapConfig";
 
 export class GameRoom extends Room<any> {
     maxClients = 8;
@@ -76,8 +77,9 @@ export class GameRoom extends Room<any> {
                                 if (this.state.players.has(targetId)) {
                                     const p = this.state.players.get(targetId)!;
                                     p.health = 100;
-                                    p.x = Math.random() * 1200;
-                                    p.y = Math.random() * 1200;
+                                    const spawn = PLAYER_SPAWNS[Math.floor(Math.random() * PLAYER_SPAWNS.length)];
+                                    p.x = spawn.x;
+                                    p.y = spawn.y;
                                     p.isImmune = true;
                                     
                                     const targetClient = this.clients.find(c => c.sessionId === targetId);
@@ -113,8 +115,9 @@ export class GameRoom extends Room<any> {
             const maxDrops = Math.max(0, this.state.players.size - 1);
             if (!this.state.gameEnded && this.state.weaponDrops.size < maxDrops) {
                 const drop = new WeaponDrop();
-                drop.x = Math.random() * 1200;
-                drop.y = Math.random() * 1200;
+                const spawn = WEAPON_SPAWNS[Math.floor(Math.random() * WEAPON_SPAWNS.length)];
+                drop.x = spawn.x;
+                drop.y = spawn.y;
                 drop.type = "sword";
                 drop.ammo = 10;
                 this.state.weaponDrops.set(`drop_${this.weaponIdCounter++}`, drop);
@@ -125,9 +128,9 @@ export class GameRoom extends Room<any> {
     onJoin(client: Client, options: any) {
         console.log(client.sessionId, "joined!");
         const player = new Player();
-        // Spawn at a random position (adjust based on map size later)
-        player.x = Math.random() * 1200;
-        player.y = Math.random() * 1200;
+        const spawn = PLAYER_SPAWNS[Math.floor(Math.random() * PLAYER_SPAWNS.length)];
+        player.x = spawn.x;
+        player.y = spawn.y;
         player.health = 100;
         player.kills = 0;
         player.weaponId = "";

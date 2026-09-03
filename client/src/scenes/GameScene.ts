@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Client, Room, Callbacks } from '@colyseus/sdk';
 import { GameState, Player } from '../schema/GameState';
+import { mapData, TILE_SIZE, SCALE, TILE_WALL } from '../shared/mapConfig';
 
 export class GameScene extends Phaser.Scene {
     private client!: Client;
@@ -9,6 +10,7 @@ export class GameScene extends Phaser.Scene {
     private weaponDropEntities: { [id: string]: Phaser.GameObjects.Sprite } = {};
     private nameTexts: { [sessionId: string]: Phaser.GameObjects.Text } = {};
     private healthBars: { [sessionId: string]: Phaser.GameObjects.Graphics } = {};
+    private wallLayer!: Phaser.Tilemaps.TilemapLayer;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
     private spaceKey!: Phaser.Input.Keyboard.Key;
     private tabKey!: Phaser.Input.Keyboard.Key;
@@ -37,16 +39,25 @@ export class GameScene extends Phaser.Scene {
             }
         });
         this.load.image('chest', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/mini_chest/mini_chest_1.png');
+        this.load.image('dungeon_tiles', 'assets/dungeon/2D Pixel Dungeon Asset Pack/character and tileset/Dungeon_Tileset.png');
     }
 
     async create() {
+        const MAP_PIXEL_SIZE = 40 * TILE_SIZE * SCALE; // 1280
+
         // Setup Map and Camera
-        this.cameras.main.setBounds(0, 0, 1200, 1200);
+        this.cameras.main.setBounds(0, 0, MAP_PIXEL_SIZE, MAP_PIXEL_SIZE);
         this.cameras.main.setZoom(2); // Zoom in on the pixel art
-        this.physics.world.setBounds(0, 0, 1200, 1200);
+        this.physics.world.setBounds(0, 0, MAP_PIXEL_SIZE, MAP_PIXEL_SIZE);
         
-        // Draw a basic grid background
-        this.add.grid(600, 600, 1200, 1200, 50, 50, 0x222222, 1, 0x333333, 1);
+        // Build tilemap
+        const map = this.make.tilemap({ data: mapData, tileWidth: TILE_SIZE, tileHeight: TILE_SIZE });
+        const tileset = map.addTilesetImage('dungeon_tiles');
+        if (tileset) {
+            this.wallLayer = map.createLayer(0, tileset, 0, 0) as Phaser.Tilemaps.TilemapLayer;
+            this.wallLayer.setScale(SCALE);
+            this.wallLayer.setCollision(TILE_WALL);
+        }
 
         // Setup Minimap (Top Left corner)
         const minimap = this.cameras.add(10, 50, 200, 200).setZoom(0.4).setName('mini');
@@ -123,6 +134,10 @@ export class GameScene extends Phaser.Scene {
             entity.setScale(2); 
             entity.setCollideWorldBounds(true);
             entity.play(`${spriteKey}_idle`);
+            
+            if (this.wallLayer) {
+                this.physics.add.collider(entity, this.wallLayer);
+            }
             
             if (isCurrentPlayer) {
                 this.cameras.main.startFollow(entity, true, 0.1, 0.1);
