@@ -1,16 +1,18 @@
 import { Room, Client } from "colyseus";
-import { GameState, Player, WeaponDrop, Trap, Projectile } from "../schema/GameState";
+import { GameState, Player, WeaponDrop, Trap, Projectile, HealthPickup } from "../schema/GameState";
 import { MapSchema } from "@colyseus/schema";
-import { PLAYER_SPAWNS, WEAPON_SPAWNS, TRAP_SPAWNS, TORCH_SPAWNS } from "../shared/mapConfig";
+import { PLAYER_SPAWNS, WEAPON_SPAWNS, TRAP_SPAWNS, TORCH_SPAWNS, HEALTH_SPAWNS } from "../shared/mapConfig";
 
 export class GameRoom extends Room<any> {
     maxClients = 8;
     timerInterval: NodeJS.Timeout | null = null;
     weaponSpawnerInterval: NodeJS.Timeout | null = null;
+    healthSpawnerInterval: NodeJS.Timeout | null = null;
     torchInterval: NodeJS.Timeout | null = null;
     weaponIdCounter = 0;
     trapIdCounter = 0;
     projectileIdCounter = 0;
+    private weaponBag: string[] = [];
     private lastSpikeHit: Map<string, number> = new Map();
     private lastPuddleHit: Map<string, number> = new Map();
     private flaskTargets: Map<string, {x: number, y: number}> = new Map();
@@ -51,6 +53,7 @@ export class GameRoom extends Room<any> {
         state.weaponDrops = new MapSchema<WeaponDrop>();
         state.traps = new MapSchema<Trap>();
         state.projectiles = new MapSchema<Projectile>();
+        state.healthPickups = new MapSchema<HealthPickup>();
         state.timeLeft = 300;
         state.gameEnded = false;
         this.setState(state);
@@ -205,15 +208,21 @@ export class GameRoom extends Room<any> {
         }, 1000);
 
         const spawnWeapon = () => {
-            const maxDrops = Math.max(2, this.state.players.size); // Always allow at least 2 drops on map
+            const maxDrops = 4; // Cap at 4 active weapon caches
             if (!this.state.gameEnded && this.state.weaponDrops.size < maxDrops) {
                 const drop = new WeaponDrop();
                 const spawn = WEAPON_SPAWNS[Math.floor(Math.random() * WEAPON_SPAWNS.length)];
                 drop.x = spawn.x;
                 drop.y = spawn.y;
-                // Randomly spawn sword, bow, flamethrower, or flask
-                const types = ["sword", "bow", "flamethrower", "flask"];
-                drop.type = types[Math.floor(Math.random() * types.length)];
+                // Draw from a shuffled "bag" to ensure balanced weapon types
+                if (this.weaponBag.length === 0) {
+                    this.weaponBag = ["sword", "bow", "flamethrower", "flask"];
+                    for (let i = this.weaponBag.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [this.weaponBag[i], this.weaponBag[j]] = [this.weaponBag[j], this.weaponBag[i]];
+                    }
+                }
+                drop.type = this.weaponBag.pop()!;
                 
                 if (drop.type === "sword") drop.ammo = 10;
                 else if (drop.type === "bow") drop.ammo = 5;
@@ -224,11 +233,26 @@ export class GameRoom extends Room<any> {
             }
         };
 
-        // Spawn initial weapons
-        spawnWeapon();
-        spawnWeapon();
+        const spawnHealth = () => {
+            const maxDrops = 4; // Always allow up to 4 health pickups
+            if (!this.state.gameEnded && this.state.healthPickups.size < maxDrops) {
+                const drop = new HealthPickup();
+                const spawn = HEALTH_SPAWNS[Math.floor(Math.random() * HEALTH_SPAWNS.length)];
+                drop.x = spawn.x;
+                drop.y = spawn.y;
+                
+                this.state.healthPickups.set(`health_${this.weaponIdCounter++}`, drop); // Reusing weaponIdCounter for generic IDs
+            }
+        };
 
-        this.weaponSpawnerInterval = setInterval(spawnWeapon, 15000); // 15 seconds interval
+        // Spawn initial weapons and health
+        spawnWeapon();
+        spawnWeapon();
+        spawnHealth();
+        spawnHealth();
+
+        this.weaponSpawnerInterval = setInterval(spawnWeapon, 20000); // 20 seconds interval
+        this.healthSpawnerInterval = setInterval(spawnHealth, 20000); // 20 seconds interval
 
         // Periodic Fireball Shooting from Torches
         this.torchInterval = setInterval(() => {
@@ -252,6 +276,24 @@ export class GameRoom extends Room<any> {
         // Fast simulation loop for projectiles
         this.setSimulationInterval((deltaTime) => {
             if (this.state.gameEnded) return;
+
+            // Health Pickup Logic
+            this.state.healthPickups.forEach((pickup: HealthPickup, pickupId: string) => {
+                let pickedUp = false;
+                this.state.players.forEach((player: Player, playerId: string) => {
+                    if (!pickedUp && player.health > 0) {
+                        const dist = Math.sqrt(Math.pow(player.x - pickup.x, 2) + Math.pow(player.y - pickup.y, 2));
+                        if (dist < 25) { // Pickup radius
+                            if (player.health < 100) {
+                                player.health = Math.min(100, player.health + 25);
+                                this.broadcast("playerHealed", { targetId: playerId, x: player.x, y: player.y, amount: 25 });
+                            }
+                            this.state.healthPickups.delete(pickupId);
+                            pickedUp = true;
+                        }
+                    }
+                });
+            });
 
             const SPEED = 400; // pixels per second
             const distance = (SPEED * deltaTime) / 1000;
@@ -397,6 +439,8 @@ export class GameRoom extends Room<any> {
         console.log("room", this.roomId, "disposing...");
         if (this.timerInterval) clearInterval(this.timerInterval);
         if (this.weaponSpawnerInterval) clearInterval(this.weaponSpawnerInterval);
+        if (this.healthSpawnerInterval) clearInterval(this.healthSpawnerInterval);
+        if (this.torchInterval) clearInterval(this.torchInterval);
     }
 
     getWinner() {

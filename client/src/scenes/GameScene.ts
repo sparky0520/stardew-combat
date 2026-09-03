@@ -8,6 +8,7 @@ export class GameScene extends Phaser.Scene {
     private room!: Room<GameState>;
     private playerEntities: { [sessionId: string]: Phaser.Physics.Arcade.Sprite } = {};
     private weaponDropEntities: { [id: string]: Phaser.GameObjects.Sprite } = {};
+    private healthPickupEntities: { [id: string]: Phaser.GameObjects.Sprite } = {};
     private trapEntities: { [id: string]: any } = {};
     private projectileEntities: { [id: string]: Phaser.GameObjects.Sprite } = {};
     private nameTexts: { [sessionId: string]: Phaser.GameObjects.Text } = {};
@@ -68,6 +69,7 @@ export class GameScene extends Phaser.Scene {
 
         this.load.image('arrow', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/arrow/Just_arrow.png');
         this.load.image('flask', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/flasks/flasks_1_1.png');
+        this.load.image('health_potion', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/flasks/flasks_2_1.png');
         this.load.image('puddle', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/flasks/flasks_1_4.png');
     }
 
@@ -372,6 +374,32 @@ export class GameScene extends Phaser.Scene {
             if (entity) {
                 entity.destroy();
                 delete this.weaponDropEntities[dropId];
+            }
+        });
+
+        callbacks.onAdd("healthPickups", (pickup: any, pickupId: string) => {
+            const entity = this.add.sprite(pickup.x, pickup.y, 'health_potion');
+            entity.setScale(1.5);
+            entity.setDepth(1);
+            
+            // Add a floating/bobbing animation
+            this.tweens.add({
+                targets: entity,
+                y: pickup.y - 10,
+                duration: 1000,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+            
+            this.healthPickupEntities[pickupId] = entity;
+        });
+
+        callbacks.onRemove("healthPickups", (_pickup: any, pickupId: string) => {
+            const entity = this.healthPickupEntities[pickupId];
+            if (entity) {
+                entity.destroy();
+                delete this.healthPickupEntities[pickupId];
             }
         });
 
@@ -703,6 +731,33 @@ export class GameScene extends Phaser.Scene {
                 ease: 'Power1',
                 onComplete: () => damageText.destroy()
             });
+        });
+
+        this.room.onMessage("playerHealed", (data) => {
+            const target = this.playerEntities[data.targetId];
+            if (target) {
+                target.setTint(0x00ff00);
+                this.time.delayedCall(300, () => {
+                    target.clearTint();
+                });
+                
+                const healText = this.add.text(data.x, data.y - 20, `+${data.amount}`, {
+                    fontSize: '24px',
+                    fontFamily: 'Impact, sans-serif',
+                    color: '#00ff00',
+                    stroke: '#000000',
+                    strokeThickness: 4
+                }).setOrigin(0.5);
+
+                this.tweens.add({
+                    targets: healText,
+                    y: data.y - 60,
+                    alpha: 0,
+                    duration: 1000,
+                    ease: 'Power1',
+                    onComplete: () => healText.destroy()
+                });
+            }
         });
     }
 

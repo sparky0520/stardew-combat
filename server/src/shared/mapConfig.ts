@@ -71,11 +71,17 @@ export const PLAYER_SPAWNS = [
 
 export const WEAPON_SPAWNS = [
     toWorld(19, 19), // Dead center
+    toWorld(20, 20),
     // Inside the 4 corner rooms to encourage close-quarters exploration
     toWorld(8, 8),
     toWorld(MAP_WIDTH - 9, 8),
     toWorld(8, MAP_HEIGHT - 9),
-    toWorld(MAP_WIDTH - 9, MAP_HEIGHT - 9)
+    toWorld(MAP_WIDTH - 9, MAP_HEIGHT - 9),
+    // Corridors
+    toWorld(19, 8),
+    toWorld(19, MAP_HEIGHT - 9),
+    toWorld(8, 19),
+    toWorld(MAP_WIDTH - 9, 19)
 ];
 
 export const TRAP_SPAWNS = [
@@ -99,4 +105,19 @@ export const TORCH_SPAWNS = [
     { ...toWorld(30, 1), angle: Math.PI / 2, wall: 'top' },
     { ...toWorld(10, MAP_HEIGHT - 2), angle: -Math.PI / 2, wall: 'bottom' },
     { ...toWorld(30, MAP_HEIGHT - 2), angle: -Math.PI / 2, wall: 'bottom' }
+];
+
+export const HEALTH_SPAWNS = [
+    toWorld(5, 5),
+    toWorld(MAP_WIDTH - 6, 5),
+    toWorld(5, MAP_HEIGHT - 6),
+    toWorld(MAP_WIDTH - 6, MAP_HEIGHT - 6),
+    toWorld(15, 15),
+    toWorld(25, 15),
+    toWorld(15, 25),
+    toWorld(25, 25),
+    toWorld(20, 5),
+    toWorld(20, MAP_HEIGHT - 6),
+    toWorld(5, 20),
+    toWorld(MAP_WIDTH - 6, 20)
 ];

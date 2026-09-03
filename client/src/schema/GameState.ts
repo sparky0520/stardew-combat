@@ -13,6 +13,12 @@ export const Player = schema({
 }, "Player");
 export type Player = SchemaType<typeof Player>;
 
+export const HealthPickup = schema({
+    x: t.number(),
+    y: t.number()
+}, "HealthPickup");
+export type HealthPickup = SchemaType<typeof HealthPickup>;
+
 export const WeaponDrop = schema({
     x: t.number(),
     y: t.number(),
@@ -43,6 +49,7 @@ export const GameState = schema({
     weaponDrops: t.map(WeaponDrop),
     traps: t.map(Trap),
     projectiles: t.map(Projectile),
+    healthPickups: t.map(HealthPickup),
     timeLeft: t.number(),
     gameEnded: t.boolean()
 }, "GameState");
