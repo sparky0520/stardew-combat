@@ -450,7 +450,7 @@ export class GameRoom extends Room<any> {
         player.weaponId = "";
         player.ammo = 0;
         player.name = options.name || "Unknown";
-        player.sprite = options.sprite || "priest1";
+        player.sprite = options.sprite || "priest";
         player.isImmune = true;
         this.state.players.set(client.sessionId, player);
 

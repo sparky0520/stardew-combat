@@ -4,7 +4,7 @@ import { GameScene } from './scenes/GameScene';
 document.getElementById('join-btn')?.addEventListener('click', () => {
     const playerName = (document.getElementById('player-name') as HTMLInputElement).value || 'Player';
     const roomNumber = (document.getElementById('room-number') as HTMLInputElement).value || 'game_room';
-    const playerSprite = (document.getElementById('player-sprite') as HTMLSelectElement).value || 'priest1';
+    const playerSprite = (document.getElementById('player-sprite') as HTMLSelectElement).value || 'priest';
 
     // Hide home screen, show app and UI
     document.getElementById('home-screen')!.style.display = 'none';
