@@ -8,7 +8,7 @@ export class GameScene extends Phaser.Scene {
     private room!: Room<GameState>;
     private playerEntities: { [sessionId: string]: Phaser.Physics.Arcade.Sprite } = {};
     private weaponDropEntities: { [id: string]: Phaser.GameObjects.Sprite } = {};
-    private trapEntities: { [id: string]: Phaser.GameObjects.Sprite } = {};
+    private trapEntities: { [id: string]: any } = {};
     private projectileEntities: { [id: string]: Phaser.GameObjects.Sprite } = {};
     private nameTexts: { [sessionId: string]: Phaser.GameObjects.Text } = {};
     private healthBars: { [sessionId: string]: Phaser.GameObjects.Graphics } = {};
@@ -62,6 +62,8 @@ export class GameScene extends Phaser.Scene {
         }
 
         this.load.image('arrow', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/arrow/Just_arrow.png');
+        this.load.image('flask', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/flasks/flasks_1_1.png');
+        this.load.image('puddle', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/flasks/flasks_1_4.png');
     }
 
     async create() {
@@ -254,6 +256,13 @@ export class GameScene extends Phaser.Scene {
                 this.healthBars[sessionId] = hpBar;
             }
             
+            const mini = this.cameras.getCamera('mini');
+            if (!isCurrentPlayer && mini) {
+                mini.ignore(entity);
+                if (this.nameTexts[sessionId]) mini.ignore(this.nameTexts[sessionId]);
+                if (this.healthBars[sessionId]) mini.ignore(this.healthBars[sessionId]);
+            }
+            
             this.playerEntities[sessionId] = entity;
         });
 
@@ -326,10 +335,37 @@ export class GameScene extends Phaser.Scene {
         });
 
         callbacks.onAdd("traps", (trap: any, trapId: string) => {
-            const entity = this.add.sprite(trap.x, trap.y, 'trap_peaks_3');
-            entity.setScale(2);
-            entity.setDepth(0); // Render floor-level
-            this.trapEntities[trapId] = entity;
+            if (trap.type === "puddle") {
+                const entity = this.add.graphics();
+                entity.setPosition(trap.x, trap.y);
+                entity.setDepth(0); // floor-level
+                
+                // Draw a bright green irregular puddle
+                entity.fillStyle(0x33ff33, 0.7); // Bright transparent green
+                entity.fillEllipse(0, 0, 70, 45); // Width 70, Height 45
+                
+                // Add an inner core
+                entity.fillStyle(0x77ff77, 0.9);
+                entity.fillEllipse(0, 0, 40, 20);
+
+                // Add a pulse animation to make it look like bubbling acid
+                this.tweens.add({
+                    targets: entity,
+                    scaleX: 1.1,
+                    scaleY: 1.1,
+                    alpha: 0.8,
+                    duration: 800,
+                    yoyo: true,
+                    repeat: -1
+                });
+                
+                this.trapEntities[trapId] = entity;
+            } else {
+                const entity = this.add.sprite(trap.x, trap.y, 'trap_peaks_3');
+                entity.setScale(2);
+                entity.setDepth(0); // floor-level
+                this.trapEntities[trapId] = entity;
+            }
         });
 
         callbacks.onRemove("traps", (trap: any, trapId: string) => {
@@ -342,11 +378,25 @@ export class GameScene extends Phaser.Scene {
 
         // Listen for Projectiles
         callbacks.onAdd("projectiles", (proj: any, projId: string) => {
-            const entity = this.add.sprite(proj.x, proj.y, 'arrow');
-            entity.setScale(1.5);
-            entity.setDepth(2);
-            entity.setRotation(proj.angle - Math.PI / 2); // Offset by -90deg
-            this.projectileEntities[projId] = entity;
+            if (proj.type === "flask") {
+                const entity = this.add.sprite(proj.x, proj.y, 'flask');
+                entity.setScale(1.5);
+                entity.setDepth(2);
+                this.projectileEntities[projId] = entity;
+                // Make it spin in the air!
+                this.tweens.add({
+                    targets: entity,
+                    rotation: Math.PI * 2,
+                    duration: 500,
+                    repeat: -1
+                });
+            } else {
+                const entity = this.add.sprite(proj.x, proj.y, 'arrow');
+                entity.setScale(1.5);
+                entity.setDepth(2);
+                entity.setRotation(proj.angle - Math.PI / 2); // Offset by -90deg
+                this.projectileEntities[projId] = entity;
+            }
         });
 
         callbacks.onRemove("projectiles", (proj: any, projId: string) => {
@@ -448,19 +498,23 @@ export class GameScene extends Phaser.Scene {
             state.traps?.forEach((trap: any, trapId: string) => {
                 const entity = this.trapEntities[trapId];
                 if (entity) {
-                    const isActive = trap.active;
-                    const isPlayingAnim = entity.anims && entity.anims.isPlaying && entity.anims.currentAnim?.key === 'peaks_trigger';
-                    
-                    if (isActive && !isPlayingAnim) {
-                        entity.play('peaks_trigger');
-                        entity.setTint(0xff5555);
-                    } else if (!isActive && isPlayingAnim) {
-                        entity.stop();
-                        entity.setTexture('trap_peaks_3');
-                        entity.clearTint();
-                    } else if (!isActive && entity.texture?.key !== 'trap_peaks_3') {
-                        entity.setTexture('trap_peaks_3');
-                        entity.clearTint();
+                    if (trap.type === "puddle") {
+                        // puddle logic (optional animation or scaling)
+                    } else {
+                        const isActive = trap.active;
+                        const isPlayingAnim = entity.anims && entity.anims.isPlaying && entity.anims.currentAnim?.key === 'peaks_trigger';
+                        
+                        if (isActive && !isPlayingAnim) {
+                            entity.play('peaks_trigger');
+                            entity.setTint(0xff5555);
+                        } else if (!isActive && isPlayingAnim) {
+                            entity.stop();
+                            entity.setTexture('trap_peaks_3');
+                            entity.clearTint();
+                        } else if (!isActive && entity.texture?.key !== 'trap_peaks_3') {
+                            entity.setTexture('trap_peaks_3');
+                            entity.clearTint();
+                        }
                     }
                 }
             });
@@ -640,9 +694,9 @@ export class GameScene extends Phaser.Scene {
                 const meEntity = this.playerEntities[this.room.sessionId];
                 if (meEntity) {
                     const angle = Phaser.Math.Angle.Between(meEntity.x, meEntity.y, pointer.worldX, pointer.worldY);
-                    this.room.send("attack", { angle: angle });
+                    this.room.send("attack", { angle: angle, targetX: pointer.worldX, targetY: pointer.worldY });
                 } else {
-                    this.room.send("attack", { angle: 0 });
+                    this.room.send("attack", { angle: 0, targetX: pointer.worldX, targetY: pointer.worldY });
                 }
             }
         });
@@ -674,7 +728,7 @@ export class GameScene extends Phaser.Scene {
                 const meEntity = this.playerEntities[this.room.sessionId];
                 if (meEntity) {
                     const angle = Phaser.Math.Angle.Between(meEntity.x, meEntity.y, this.input.activePointer.worldX, this.input.activePointer.worldY);
-                    this.room.send("attack", { angle: angle });
+                    this.room.send("attack", { angle: angle, targetX: this.input.activePointer.worldX, targetY: this.input.activePointer.worldY });
                 }
             }
         }

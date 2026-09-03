@@ -11,6 +11,8 @@ export class GameRoom extends Room<any> {
     trapIdCounter = 0;
     projectileIdCounter = 0;
     private lastSpikeHit: Map<string, number> = new Map();
+    private lastPuddleHit: Map<string, number> = new Map();
+    private flaskTargets: Map<string, {x: number, y: number}> = new Map();
 
     private handlePlayerDeath(targetId: string, target: Player, killerClient?: Client, killerName?: string) {
         if (killerClient && killerName) {
@@ -153,6 +155,17 @@ export class GameRoom extends Room<any> {
                         }
                     }
                 });
+            } else if (currentWeapon === "flask") {
+                const angle = message.angle || 0;
+                const projectile = new Projectile();
+                projectile.x = attacker.x;
+                projectile.y = attacker.y;
+                projectile.angle = angle;
+                projectile.type = "flask";
+                projectile.ownerId = client.sessionId;
+                const projId = `proj_${this.projectileIdCounter++}`;
+                this.state.projectiles.set(projId, projectile);
+                this.flaskTargets.set(projId, { x: message.targetX || attacker.x, y: message.targetY || attacker.y });
             }
         });
 
@@ -184,13 +197,14 @@ export class GameRoom extends Room<any> {
                 const spawn = WEAPON_SPAWNS[Math.floor(Math.random() * WEAPON_SPAWNS.length)];
                 drop.x = spawn.x;
                 drop.y = spawn.y;
-                // Randomly spawn sword, bow, or flamethrower
-                const types = ["sword", "bow", "flamethrower"];
+                // Randomly spawn sword, bow, flamethrower, or flask
+                const types = ["sword", "bow", "flamethrower", "flask"];
                 drop.type = types[Math.floor(Math.random() * types.length)];
                 
                 if (drop.type === "sword") drop.ammo = 10;
                 else if (drop.type === "bow") drop.ammo = 5;
                 else if (drop.type === "flamethrower") drop.ammo = 50; // High ammo for rapid fire
+                else if (drop.type === "flask") drop.ammo = 3;
                 
                 this.state.weaponDrops.set(`drop_${this.weaponIdCounter++}`, drop);
             }
@@ -211,32 +225,61 @@ export class GameRoom extends Room<any> {
             const MAP_SIZE = 1280;
 
             this.state.projectiles.forEach((proj: Projectile, projId: string) => {
+                if (proj.type === "flask") {
+                    const target = this.flaskTargets.get(projId);
+                    if (target) {
+                        const distToTarget = Math.sqrt(Math.pow(target.x - proj.x, 2) + Math.pow(target.y - proj.y, 2));
+                        if (distToTarget <= distance) {
+                            this.state.projectiles.delete(projId);
+                            this.flaskTargets.delete(projId);
+                            
+                            const puddle = new Trap();
+                            puddle.x = target.x;
+                            puddle.y = target.y;
+                            puddle.type = "puddle";
+                            puddle.active = true;
+                            const trapId = `trap_${this.trapIdCounter++}`;
+                            this.state.traps.set(trapId, puddle);
+                            
+                            setTimeout(() => {
+                                if (this.state.traps.has(trapId)) {
+                                    this.state.traps.delete(trapId);
+                                }
+                            }, 5000);
+                            return;
+                        }
+                    }
+                }
+                
                 proj.x += Math.cos(proj.angle) * distance;
                 proj.y += Math.sin(proj.angle) * distance;
 
                 if (proj.x < 0 || proj.x > MAP_SIZE || proj.y < 0 || proj.y > MAP_SIZE) {
                     this.state.projectiles.delete(projId);
+                    this.flaskTargets.delete(projId);
                     return;
                 }
 
-                let hit = false;
-                this.state.players.forEach((player: Player, playerId: string) => {
-                    if (!hit && playerId !== proj.ownerId && player.health > 0 && !player.isImmune) {
-                        const dist = Math.sqrt(Math.pow(player.x - proj.x, 2) + Math.pow(player.y - proj.y, 2));
-                        if (dist < 20) { // Arrow hit radius
-                            hit = true;
-                            player.health -= 20; // Arrow damage
-                            this.broadcast("damageTaken", { targetId: playerId, damage: 20, x: player.x, y: player.y });
-                            if (player.health <= 0) {
-                                const owner = this.state.players.get(proj.ownerId);
-                                if (owner) owner.kills += 1;
-                                const ownerClient = this.clients.find(c => c.sessionId === proj.ownerId);
-                                this.handlePlayerDeath(playerId, player, ownerClient, player.name);
+                if (proj.type === "arrow") {
+                    let hit = false;
+                    this.state.players.forEach((player: Player, playerId: string) => {
+                        if (!hit && playerId !== proj.ownerId && player.health > 0 && !player.isImmune) {
+                            const dist = Math.sqrt(Math.pow(player.x - proj.x, 2) + Math.pow(player.y - proj.y, 2));
+                            if (dist < 20) { // Arrow hit radius
+                                hit = true;
+                                player.health -= 20; // Arrow damage
+                                this.broadcast("damageTaken", { targetId: playerId, damage: 20, x: player.x, y: player.y });
+                                if (player.health <= 0) {
+                                    const owner = this.state.players.get(proj.ownerId);
+                                    if (owner) owner.kills += 1;
+                                    const ownerClient = this.clients.find(c => c.sessionId === proj.ownerId);
+                                    this.handlePlayerDeath(playerId, player, ownerClient, player.name);
+                                }
+                                this.state.projectiles.delete(projId);
                             }
-                            this.state.projectiles.delete(projId);
                         }
-                    }
-                });
+                    });
+                }
             });
 
             // Instant trap collision detection
@@ -254,6 +297,25 @@ export class GameRoom extends Room<any> {
                                     
                                     if (player.health <= 0) {
                                         this.broadcast("killLog", { message: `${player.name} died to a Spike Trap!` });
+                                        this.handlePlayerDeath(sessionId, player);
+                                    }
+                                }
+                            }
+                        }
+                    });
+                } else if (trap.active && trap.type === "puddle") {
+                    this.state.players.forEach((player: Player, sessionId: string) => {
+                        if (player.health > 0 && !player.isImmune) {
+                            const dist = Math.sqrt(Math.pow(player.x - trap.x, 2) + Math.pow(player.y - trap.y, 2));
+                            if (dist < 35) { // AOE puddle radius
+                                const lastHit = this.lastPuddleHit.get(sessionId) || 0;
+                                if (Date.now() - lastHit > 500) { // Damage tick every 0.5 seconds
+                                    this.lastPuddleHit.set(sessionId, Date.now());
+                                    player.health -= 10;
+                                    this.broadcast("damageTaken", { targetId: sessionId, damage: 10, x: player.x, y: player.y });
+                                    
+                                    if (player.health <= 0) {
+                                        this.broadcast("killLog", { message: `${player.name} melted in an acid puddle!` });
                                         this.handlePlayerDeath(sessionId, player);
                                     }
                                 }
