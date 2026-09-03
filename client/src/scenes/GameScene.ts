@@ -51,7 +51,11 @@ export class GameScene extends Phaser.Scene {
             this.load.spritesheet(`${sprite}_death`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_death.png`, { frameWidth: 32, frameHeight: 32 });
         });
 
-        this.load.image('chest', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/mini_chest/mini_chest_1.png');
+        for (let i = 1; i <= 4; i++) {
+            this.load.image(`chest_${i}`, `assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/chest/chest_${i}.png`);
+            this.load.image(`chest_open_${i}`, `assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/chest/chest_open_${i}.png`);
+        }
+
         this.load.image('dungeon_tiles', 'assets/dungeon/2D Pixel Dungeon Asset Pack/character and tileset/Dungeon_Tileset.png');
 
         for (let i = 1; i <= 4; i++) {
@@ -68,9 +72,12 @@ export class GameScene extends Phaser.Scene {
         }
 
         this.load.image('arrow', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/arrow/Just_arrow.png');
-        this.load.image('flask', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/flasks/flasks_1_1.png');
-        this.load.image('health_potion', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/flasks/flasks_2_1.png');
-        this.load.image('puddle', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/flasks/flasks_1_4.png');
+        
+        for (let i = 1; i <= 4; i++) {
+            for (let j = 1; j <= 4; j++) {
+                this.load.image(`flasks_${i}_${j}`, `assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/flasks/flasks_${i}_${j}.png`);
+            }
+        }
     }
 
     async create() {
@@ -215,6 +222,44 @@ export class GameScene extends Phaser.Scene {
             repeat: -1
         });
 
+        this.anims.create({
+            key: 'chest_idle',
+            frames: [
+                { key: 'chest_1' },
+                { key: 'chest_2' },
+                { key: 'chest_3' },
+                { key: 'chest_4' }
+            ],
+            frameRate: 8,
+            repeat: -1
+        });
+
+        this.anims.create({
+            key: 'chest_open',
+            frames: [
+                { key: 'chest_open_1' },
+                { key: 'chest_open_2' },
+                { key: 'chest_open_3' },
+                { key: 'chest_open_4' }
+            ],
+            frameRate: 10,
+            repeat: 0
+        });
+
+        for (let i = 1; i <= 4; i++) {
+            this.anims.create({
+                key: `flasks_${i}_anim`,
+                frames: [
+                    { key: `flasks_${i}_1` },
+                    { key: `flasks_${i}_2` },
+                    { key: `flasks_${i}_3` },
+                    { key: `flasks_${i}_4` }
+                ],
+                frameRate: 8,
+                repeat: -1
+            });
+        }
+
         // Connect to the local Colyseus server
         this.client = new Client('ws://localhost:2567');
         
@@ -332,9 +377,10 @@ export class GameScene extends Phaser.Scene {
         let dropLogTimeout: NodeJS.Timeout;
         callbacks.onAdd("weaponDrops", (drop: any, dropId: string) => {
             console.log('Weapon drop spawned:', drop);
-            const entity = this.add.sprite(drop.x, drop.y, 'chest');
+            const entity = this.add.sprite(drop.x, drop.y, 'chest_1');
             entity.setScale(1.5); // Slightly scale up the chest
             entity.setDepth(1); // Chests above traps, below players
+            entity.play('chest_idle');
             this.weaponDropEntities[dropId] = entity;
             
             const logger = document.getElementById('drop-logger');
@@ -372,15 +418,19 @@ export class GameScene extends Phaser.Scene {
         callbacks.onRemove("weaponDrops", (_drop: any, dropId: string) => {
             const entity = this.weaponDropEntities[dropId];
             if (entity) {
-                entity.destroy();
+                entity.play('chest_open');
+                entity.once('animationcomplete', () => {
+                    entity.destroy();
+                });
                 delete this.weaponDropEntities[dropId];
             }
         });
 
         callbacks.onAdd("healthPickups", (pickup: any, pickupId: string) => {
-            const entity = this.add.sprite(pickup.x, pickup.y, 'health_potion');
+            const entity = this.add.sprite(pickup.x, pickup.y, 'flasks_2_1');
             entity.setScale(1.5);
             entity.setDepth(1);
+            entity.play('flasks_2_anim');
             
             // Add a floating/bobbing animation
             this.tweens.add({
@@ -470,9 +520,10 @@ export class GameScene extends Phaser.Scene {
                 entity.play('flame_fire_loop');
                 this.projectileEntities[projId] = entity;
             } else if (proj.type === "flask") {
-                const entity = this.add.sprite(proj.x, proj.y, 'flask');
+                const entity = this.add.sprite(proj.x, proj.y, 'flasks_1_1');
                 entity.setScale(1.5);
                 entity.setDepth(2);
+                entity.play('flasks_1_anim');
                 this.projectileEntities[projId] = entity;
                 // Make it spin in the air!
                 this.tweens.add({
