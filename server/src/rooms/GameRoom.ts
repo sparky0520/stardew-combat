@@ -477,12 +477,14 @@ export class GameRoom extends Room<any> {
     getWinner() {
         let maxKills = -1;
         let winnerId = "";
+        let winnerName = "";
         this.state.players.forEach((player: Player, sessionId: string) => {
             if (player.kills > maxKills) {
                 maxKills = player.kills;
                 winnerId = sessionId;
+                winnerName = player.name || sessionId.substring(0, 4);
             }
         });
-        return { sessionId: winnerId, kills: maxKills };
+        return { sessionId: winnerId, kills: maxKills, name: winnerName };
     }
 }

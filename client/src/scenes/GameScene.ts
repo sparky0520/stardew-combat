@@ -21,6 +21,12 @@ export class GameScene extends Phaser.Scene {
     private playerName!: string;
     private roomNumber!: string;
     private playerSprite!: string;
+    private isChanneling: boolean = false;
+    private channelingTimer: Phaser.Time.TimerEvent | null = null;
+    private channelingBar: Phaser.GameObjects.Graphics | null = null;
+    private channelingDropId: string = "";
+    private gameWinner: any = null;
+    private respawnInterval: any = null;
 
     constructor() {
         super({ key: 'GameScene' });
@@ -78,6 +84,20 @@ export class GameScene extends Phaser.Scene {
                 this.load.image(`flasks_${i}_${j}`, `assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/flasks/flasks_${i}_${j}.png`);
             }
         }
+        
+        this.load.audio('bgm', 'assets/audio/bgm_dungeon.mp3');
+        this.load.audio('sword_swing', 'assets/audio/sword_swing.wav');
+        this.load.audio('bow_shoot', 'assets/audio/bow_shoot.wav');
+        this.load.audio('fireball_shoot', 'assets/audio/fireball_shoot.wav');
+        this.load.audio('player_hit', 'assets/audio/player_hit.wav');
+        this.load.audio('enemy_death', 'assets/audio/enemy_death.wav');
+        this.load.audio('player_death', 'assets/audio/player_death.wav');
+        this.load.audio('chest_open', 'assets/audio/chest_open.wav');
+        this.load.audio('item_pickup', 'assets/audio/item_pickup.wav');
+        this.load.audio('health_pickup', 'assets/audio/health_pickup.wav');
+        this.load.audio('trap_spikes', 'assets/audio/trap_spikes.wav');
+        this.load.audio('acid_bubble', 'assets/audio/acid_bubble.wav');
+        this.load.audio('chest_chime', 'assets/audio/chest_chime.wav');
     }
 
     async create() {
@@ -195,7 +215,8 @@ export class GameScene extends Phaser.Scene {
                 { key: 'flame_4' }
             ],
             frameRate: 15,
-            repeat: -1
+            repeat: -1,
+            yoyo: true
         });
 
         this.anims.create({
@@ -259,6 +280,9 @@ export class GameScene extends Phaser.Scene {
                 repeat: -1
             });
         }
+
+        // Play BGM
+        this.sound.play('bgm', { loop: true, volume: 0.3 });
 
         // Connect to the local Colyseus server
         this.client = new Client('ws://localhost:2567');
@@ -396,6 +420,7 @@ export class GameScene extends Phaser.Scene {
         });
 
         this.room.onMessage("weaponTaken", (data) => {
+            this.sound.play('item_pickup', { volume: 0.8 });
             const logger = document.getElementById('drop-logger');
             if (logger) {
                 logger.innerText = `Weapons cache was taken by ${data.name}!`;
@@ -416,6 +441,9 @@ export class GameScene extends Phaser.Scene {
         });
 
         callbacks.onRemove("weaponDrops", (_drop: any, dropId: string) => {
+            if (this.isChanneling && this.channelingDropId === dropId) {
+                this.cancelChanneling();
+            }
             const entity = this.weaponDropEntities[dropId];
             if (entity) {
                 entity.play('chest_open');
@@ -472,6 +500,7 @@ export class GameScene extends Phaser.Scene {
                 
                 this.trapEntities[trapId] = entity;
             } else if (trap.type === "puddle") {
+                this.sound.play('acid_bubble', { volume: 0.6 });
                 const entity = this.add.graphics();
                 entity.setPosition(trap.x, trap.y);
                 entity.setDepth(0); // floor-level
@@ -616,8 +645,10 @@ export class GameScene extends Phaser.Scene {
                         entity.setData('isDead', true);
                         if (['skeleton1', 'skeleton2', 'vampire'].includes(player.sprite)) {
                             entity.play(`${player.sprite}_death`, true);
+                            this.sound.play('enemy_death', { volume: 0.7 });
                         } else {
                             entity.setRotation(Math.PI / 2); // Generic "fallen over" for priests
+                            this.sound.play('player_death', { volume: 0.8 });
                         }
                     } else if (player.health > 0 && wasDead) {
                         entity.setData('isDead', false);
@@ -650,14 +681,12 @@ export class GameScene extends Phaser.Scene {
                         
                         if (isActive && !isPlayingAnim) {
                             entity.play('peaks_trigger');
-                            entity.setTint(0xff5555);
+                            this.sound.play('trap_spikes', { volume: 0.5 });
                         } else if (!isActive && isPlayingAnim) {
                             entity.stop();
                             entity.setTexture('trap_peaks_3');
-                            entity.clearTint();
                         } else if (!isActive && entity.texture?.key !== 'trap_peaks_3') {
                             entity.setTexture('trap_peaks_3');
-                            entity.clearTint();
                         }
                     }
                 }
@@ -667,10 +696,38 @@ export class GameScene extends Phaser.Scene {
         });
         
         this.room.onMessage("gameOver", (winner: any) => {
-            document.getElementById('game-message')!.innerText = `Game Over! Winner: ${winner.sessionId} with ${winner.kills} kills`;
+            this.gameWinner = winner;
+            document.getElementById('scoreboard')!.style.display = 'block';
+            this.updateUI();
+            
+            let isCleanedUp = false;
+            const cleanupAndLeave = () => {
+                if (isCleanedUp) return;
+                isCleanedUp = true;
+                this.room.leave();
+                this.scene.start('MainMenuScene');
+                this.gameWinner = null;
+                document.getElementById('scoreboard')!.style.display = 'none';
+                if (escKey) this.input.keyboard?.removeKey('ESC');
+                if (timer) clearTimeout(timer);
+            };
+
+            const escKey = this.input.keyboard?.addKey('ESC');
+            escKey?.once('down', () => {
+                cleanupAndLeave();
+            });
+            
+            // Wait 15 seconds, then go back to main menu
+            const timer = setTimeout(() => {
+                cleanupAndLeave();
+            }, 15000);
         });
 
         this.room.onMessage("playerAttacked", (data) => {
+            if (data.weapon === 'sword') this.sound.play('sword_swing', { volume: 0.7 });
+            else if (data.weapon === 'bow') this.sound.play('bow_shoot', { volume: 0.7 });
+            else if (data.weapon === 'flamethrower') this.sound.play('fireball_shoot', { volume: 0.7 });
+
             const attacker = this.playerEntities[data.playerId];
             if (attacker) {
                 const playerState = this.room.state.players.get(data.playerId);
@@ -750,6 +807,7 @@ export class GameScene extends Phaser.Scene {
         });
 
         this.room.onMessage("damageTaken", (data) => {
+            this.sound.play('player_hit', { volume: 0.5 });
             const target = this.playerEntities[data.targetId];
             if (target) {
                 const playerState = this.room.state.players.get(data.targetId);
@@ -787,6 +845,7 @@ export class GameScene extends Phaser.Scene {
         });
 
         this.room.onMessage("playerHealed", (data) => {
+            this.sound.play('health_pickup', { volume: 0.8 });
             const target = this.playerEntities[data.targetId];
             if (target) {
                 target.setTint(0x00ff00);
@@ -820,9 +879,26 @@ export class GameScene extends Phaser.Scene {
         const deathScreen = document.getElementById('death-screen');
         if (me && deathScreen) {
             if (me.health <= 0) {
-                deathScreen.style.display = 'flex';
+                if (deathScreen.style.display !== 'flex') {
+                    deathScreen.style.display = 'flex';
+                    let countdown = 3;
+                    const timerEl = document.getElementById('respawn-timer');
+                    if (timerEl) timerEl.innerText = countdown.toString();
+                    
+                    if (this.respawnInterval) clearInterval(this.respawnInterval);
+                    this.respawnInterval = setInterval(() => {
+                        countdown--;
+                        if (timerEl) timerEl.innerText = countdown.toString();
+                        if (countdown <= 0) {
+                            clearInterval(this.respawnInterval);
+                        }
+                    }, 1000);
+                }
             } else {
-                deathScreen.style.display = 'none';
+                if (deathScreen.style.display !== 'none') {
+                    deathScreen.style.display = 'none';
+                    if (this.respawnInterval) clearInterval(this.respawnInterval);
+                }
             }
         }
         
@@ -849,13 +925,83 @@ export class GameScene extends Phaser.Scene {
         
         const scoreboardEl = document.getElementById('scoreboard');
         if (scoreboardEl) {
-            let html = '<b>Scoreboard</b><br/>';
+            let html = '';
+            if (this.gameWinner) {
+                html += `<div style="text-align: center; color: #ffd700; font-size: 24px; margin-bottom: 10px;">Game Over!<br/>Winner: ${this.gameWinner.name} with ${this.gameWinner.kills} kills</div>`;
+                html += `<div style="text-align: center; color: #aaa; font-size: 14px; margin-bottom: 15px;">Press ESC to return to main menu immediately</div>`;
+            }
+            html += '<b>Scoreboard</b><br/>';
             this.room.state.players?.forEach((player: any, sessionId: string) => {
                 const isMe = sessionId === this.room.sessionId ? ' (You)' : '';
                 const pName = player.name || sessionId.substring(0, 4);
                 html += `${pName}${isMe}: ${player.kills} kills<br/>`;
             });
             scoreboardEl.innerHTML = html;
+        }
+    }
+
+    private startChanneling(dropId: string) {
+        this.isChanneling = true;
+        this.channelingDropId = dropId;
+        
+        const player = this.playerEntities[this.room?.sessionId || ""];
+        if (!player) return;
+
+        this.channelingBar = this.add.graphics();
+        this.channelingBar.setDepth(4);
+        
+        let progress = 0;
+        this.channelingTimer = this.time.addEvent({
+            delay: 50,
+            callback: () => {
+                progress += 50;
+                
+                if (this.channelingBar && player) {
+                    this.channelingBar.clear();
+                    this.channelingBar.fillStyle(0x000000, 0.7);
+                    this.channelingBar.fillRect(player.x - 20, player.y - 40, 40, 8);
+                    
+                    this.channelingBar.fillStyle(0xffff00, 1);
+                    this.channelingBar.fillRect(player.x - 20, player.y - 40, 40 * (progress / 2000), 8);
+                }
+                
+                if (progress === 1500) {
+                    this.sound.play('chest_chime', { volume: 0.8 });
+                }
+
+                if (progress >= 2000) {
+                    this.finishChanneling();
+                }
+            },
+            repeat: (2000 / 50) - 1
+        });
+    }
+
+    private cancelChanneling() {
+        this.isChanneling = false;
+        this.channelingDropId = "";
+        if (this.channelingTimer) {
+            this.channelingTimer.remove();
+            this.channelingTimer = null;
+        }
+        if (this.channelingBar) {
+            this.channelingBar.destroy();
+            this.channelingBar = null;
+        }
+    }
+
+    private finishChanneling() {
+        this.isChanneling = false;
+        if (this.channelingTimer) {
+            this.channelingTimer.remove();
+            this.channelingTimer = null;
+        }
+        if (this.channelingBar) {
+            this.channelingBar.destroy();
+            this.channelingBar = null;
+        }
+        if (this.room) {
+            this.room.send("pickup");
         }
     }
 
@@ -887,7 +1033,23 @@ export class GameScene extends Phaser.Scene {
 
         // Pickup weapon
         if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-            this.room.send("pickup");
+            let closestDropId = "";
+            let minDistance = 100;
+            const player = this.playerEntities[this.room.sessionId];
+            
+            if (player && this.room.state.weaponDrops) {
+                this.room.state.weaponDrops.forEach((drop: any, dropId: string) => {
+                    const dist = Math.sqrt(Math.pow(player.x - drop.x, 2) + Math.pow(player.y - drop.y, 2));
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        closestDropId = dropId;
+                    }
+                });
+            }
+            
+            if (closestDropId && !this.isChanneling) {
+                this.startChanneling(closestDropId);
+            }
         }
         
         const me = this.room.state.players?.get(this.room.sessionId);
@@ -921,6 +1083,9 @@ export class GameScene extends Phaser.Scene {
         if (this.cursors.down.isDown) dy += 1;
 
         if (dx !== 0 || dy !== 0) {
+            if (this.isChanneling) {
+                this.cancelChanneling();
+            }
             // Normalize direction vector
             const length = Math.sqrt(dx * dx + dy * dy);
             dx /= length;
