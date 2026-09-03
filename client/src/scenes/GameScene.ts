@@ -72,16 +72,32 @@ export class GameScene extends Phaser.Scene {
             this.wallLayer.setCollision(TILE_WALL);
         }
 
-        // Setup Minimap (Top Left corner)
-        const minimap = this.cameras.add(10, 50, 200, 200).setZoom(0.4).setName('mini');
-        minimap.setBackgroundColor(0x001122);
+        // Setup Full Map (Toggleable with 'M')
+        const cw = window.innerWidth;
+        const ch = window.innerHeight;
+        const mapSize = Math.min(cw, ch) * 0.8;
+        const mapZoom = mapSize / MAP_PIXEL_SIZE; // Fit perfectly
         
-        // Add a visual border to the minimap (drawn on the main UI layer)
-        const border = this.add.graphics();
-        border.lineStyle(4, 0xffffff, 1);
-        border.strokeRect(10, 50, 200, 200);
-        border.setScrollFactor(0); // Fix it to the screen
-        minimap.ignore(border); // Don't draw the border inside the minimap itself
+        const minimap = this.cameras.add((cw - mapSize)/2, (ch - mapSize)/2, mapSize, mapSize).setZoom(mapZoom).setName('mini');
+        minimap.setBackgroundColor('rgba(0,0,0,0)'); // Transparent map bg
+        minimap.centerOn(MAP_PIXEL_SIZE / 2, MAP_PIXEL_SIZE / 2);
+        minimap.setVisible(false);
+
+        // Black translucent overlay behind the map
+        const overlay = this.add.graphics();
+        overlay.fillStyle(0x000000, 0.5); // Match scoreboard opacity
+        overlay.fillRect(0, 0, cw, ch);
+        overlay.setScrollFactor(0);
+        overlay.setDepth(9);
+        overlay.setVisible(false);
+        minimap.ignore(overlay);
+
+        const mKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.M);
+        mKey.on('down', () => {
+            const isVisible = !minimap.visible;
+            minimap.setVisible(isVisible);
+            overlay.setVisible(isVisible);
+        });
 
         this.cursors = this.input.keyboard!.createCursorKeys();
         this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
@@ -129,8 +145,9 @@ export class GameScene extends Phaser.Scene {
                 { key: 'trap_peaks_3' },
                 { key: 'trap_peaks_4' }
             ],
-            frameRate: 15,
-            repeat: 0
+            frameRate: 10,
+            repeat: -1,
+            yoyo: true
         });
 
         // Connect to the local Colyseus server
@@ -197,8 +214,6 @@ export class GameScene extends Phaser.Scene {
             
             if (isCurrentPlayer) {
                 this.cameras.main.startFollow(entity, true, 0.1, 0.1);
-                const minimap = this.cameras.getCamera('mini');
-                if (minimap) minimap.startFollow(entity, true, 0.1, 0.1);
             } else {
                 const text = this.add.text(player.x, player.y - 30, player.name || 'Unknown', {
                     fontSize: '12px',
@@ -300,9 +315,11 @@ export class GameScene extends Phaser.Scene {
             trap.onChange = (changes: any) => {
                 if (trap.active) {
                     entity.play('peaks_trigger');
+                    entity.setTint(0xff5555); // Red tint to scream DANGER
                 } else {
                     entity.stop();
                     entity.setTexture('trap_peaks_1');
+                    entity.clearTint();
                 }
             };
         });
