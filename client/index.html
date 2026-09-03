@@ -383,7 +383,9 @@
         const list = document.getElementById('rooms-list');
         list.innerHTML = '<div style="text-align:center; color:#aaa; margin-top: 20px;">Loading...</div>';
         try {
-          const res = await fetch('http://localhost:2567/rooms');
+          const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+          const apiUrl = isLocalhost ? 'http://localhost:2567/rooms' : '/rooms';
+          const res = await fetch(apiUrl);
           const rooms = await res.json();
           list.innerHTML = '';
           

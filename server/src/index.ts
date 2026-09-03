@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import { Server, matchMaker } from "colyseus";
 import { GameRoom } from "./rooms/GameRoom";
+import path from "path";
 
 const port = Number(process.env.PORT || 2567);
 const app = express();
@@ -18,6 +19,14 @@ app.get("/rooms", async (req, res) => {
         console.error(e);
         res.status(500).json([]);
     }
+});
+
+// Serve frontend static files
+const clientDistPath = path.join(__dirname, "../../client/dist");
+app.use(express.static(clientDistPath));
+
+app.get("*", (req, res) => {
+    res.sendFile(path.join(clientDistPath, "index.html"));
 });
 
 const server = http.createServer(app);

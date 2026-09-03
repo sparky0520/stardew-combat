@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "concurrently \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
-    "dev": "npm run start"
+    "dev": "npm run start",
+    "build": "npm run build --workspace=client",
+    "start:prod": "npm run start --workspace=server"
   },
   "keywords": [],
   "author": "",

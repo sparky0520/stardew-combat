@@ -260,8 +260,12 @@ export class GameScene extends Phaser.Scene {
         // Play BGM
         this.sound.play('bgm', { loop: true, volume: 0.3 });
 
-        // Connect to the local Colyseus server
-        this.client = new Client('ws://localhost:2567');
+        // Connect to the Colyseus server dynamically
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const serverUrl = isLocalhost 
+            ? 'ws://localhost:2567' 
+            : `${window.location.protocol.replace('http', 'ws')}//${window.location.host}`;
+        this.client = new Client(serverUrl);
         
         try {
             const reconnectionToken = sessionStorage.getItem('reconnectionToken');
