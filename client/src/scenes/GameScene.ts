@@ -89,7 +89,6 @@ export class GameScene extends Phaser.Scene {
         this.load.audio('chest_open', 'assets/audio/chest_open.wav');
         this.load.audio('item_pickup', 'assets/audio/item_pickup.wav');
         this.load.audio('health_pickup', 'assets/audio/health_pickup.wav');
-        this.load.audio('trap_spikes', 'assets/audio/trap_spikes.wav');
         this.load.audio('acid_bubble', 'assets/audio/acid_bubble.wav');
         this.load.audio('chest_chime', 'assets/audio/chest_chime.wav');
     }
@@ -682,7 +681,6 @@ export class GameScene extends Phaser.Scene {
                         
                         if (isActive && !isPlayingAnim) {
                             entity.play('peaks_trigger');
-                            this.sound.play('trap_spikes', { volume: 0.5 });
                         } else if (!isActive && isPlayingAnim) {
                             entity.stop();
                             entity.setTexture('trap_peaks_3');
