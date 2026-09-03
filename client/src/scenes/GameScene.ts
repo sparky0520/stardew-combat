@@ -264,7 +264,12 @@ export class GameScene extends Phaser.Scene {
         this.client = new Client('ws://localhost:2567');
         
         try {
-            this.room = await this.client.joinOrCreate<GameState>(this.roomNumber, { name: this.playerName, sprite: this.playerSprite });
+            // Join or create a game_room matching the provided roomName
+            this.room = await this.client.joinOrCreate<GameState>('game_room', { 
+                name: this.playerName, 
+                sprite: this.playerSprite,
+                roomName: this.roomNumber
+            });
             console.log('Joined room:', this.room.name);
             
             this.setupColyseusListeners();

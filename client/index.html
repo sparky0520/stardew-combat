@@ -150,6 +150,45 @@
         background-color: #c0392b; 
         border-color: #e74c3c;
       }
+      .home-container {
+        display: flex;
+        gap: 40px;
+        align-items: flex-start;
+      }
+      .home-panel h2 {
+        margin-top: 0;
+        font-size: 24px;
+        text-shadow: 2px 2px 0 #000;
+        color: #f1c40f;
+        margin-bottom: 20px;
+      }
+      .rooms-list {
+        width: 250px;
+        height: 300px;
+        overflow-y: auto;
+        background: rgba(0,0,0,0.5);
+        border: 2px solid #555;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        box-sizing: border-box;
+      }
+      .room-item {
+        background: #333;
+        padding: 10px;
+        cursor: pointer;
+        border: 2px solid #555;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .room-item:hover {
+        border-color: #f1c40f;
+        background: #444;
+      }
+      .room-name { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+      .room-players { color: #aaa; font-size: 14px; }
       .sprite-selector {
         display: flex;
         justify-content: center;
@@ -230,27 +269,37 @@
   </head>
   <body>
     <div id="home-screen">
-      <div class="home-panel">
-        <h1>Stardew Combat</h1>
-        <div class="form-group">
-          <label>In-game Name:</label>
-          <input type="text" id="player-name" placeholder="Enter your name" value="Player" />
-        </div>
-        <div class="form-group">
-          <label>Room Number:</label>
-          <input type="text" id="room-number" placeholder="Room Name" value="game_room" />
-        </div>
-        <div class="form-group" style="text-align: center;">
-          <label>Select Sprite:</label>
-          <div class="sprite-selector">
-            <button type="button" id="prev-sprite" class="nav-btn">&lt;</button>
-            <div id="sprite-preview"></div>
-            <button type="button" id="next-sprite" class="nav-btn">&gt;</button>
+      <div class="home-container">
+        <div class="home-panel">
+          <h1>Stardew Combat</h1>
+          <div class="form-group">
+            <label>In-game Name:</label>
+            <input type="text" id="player-name" placeholder="Enter your name" value="Player" />
           </div>
-          <input type="hidden" id="player-sprite" value="skeleton" />
-          <div id="sprite-name" style="margin-top: 10px; font-weight: bold; color: #f1c40f; font-size: 20px;">Skeleton</div>
+          <div class="form-group">
+            <label>Room Name:</label>
+            <input type="text" id="room-number" placeholder="Enter room name" value="Lobby 1" />
+          </div>
+          <div class="form-group" style="text-align: center;">
+            <label>Select Sprite:</label>
+            <div class="sprite-selector">
+              <button type="button" id="prev-sprite" class="nav-btn">&lt;</button>
+              <div id="sprite-preview"></div>
+              <button type="button" id="next-sprite" class="nav-btn">&gt;</button>
+            </div>
+            <input type="hidden" id="player-sprite" value="skeleton" />
+            <div id="sprite-name" style="margin-top: 10px; font-weight: bold; color: #f1c40f; font-size: 20px;">Skeleton</div>
+          </div>
+          <button id="join-btn">Join Game</button>
         </div>
-        <button id="join-btn">Join Game</button>
+
+        <div class="home-panel" id="public-rooms-panel">
+          <h2>Public Rooms</h2>
+          <div class="rooms-list" id="rooms-list">
+            <!-- Populated via JS -->
+          </div>
+          <button id="refresh-rooms-btn" style="margin-top: 20px; font-size: 14px; padding: 8px 16px;">Refresh</button>
+        </div>
       </div>
     </div>
 
@@ -329,6 +378,39 @@
         cursorStyle.innerHTML = `* { cursor: url('${dataURL}') 6 6, auto !important; }`;
         document.head.appendChild(cursorStyle);
       };
+
+      async function fetchRooms() {
+        const list = document.getElementById('rooms-list');
+        list.innerHTML = '<div style="text-align:center; color:#aaa; margin-top: 20px;">Loading...</div>';
+        try {
+          const res = await fetch('http://localhost:2567/rooms');
+          const rooms = await res.json();
+          list.innerHTML = '';
+          
+          let hasActiveRooms = false;
+          rooms.forEach(room => {
+            hasActiveRooms = true;
+            const item = document.createElement('div');
+            item.className = 'room-item';
+            const roomName = room.metadata && room.metadata.roomName ? room.metadata.roomName : room.roomId;
+            item.innerHTML = `<span class="room-name" title="${roomName}">${roomName}</span><span class="room-players">${room.clients}/${room.maxClients || 8}</span>`;
+            item.onclick = () => {
+              document.getElementById('room-number').value = roomName;
+            };
+            list.appendChild(item);
+          });
+          
+          if (!hasActiveRooms) {
+            list.innerHTML = '<div style="text-align:center; color:#aaa; margin-top: 20px;">No active rooms found.</div>';
+          }
+        } catch (e) {
+          list.innerHTML = '<div style="text-align:center; color:#ff5555; margin-top: 20px;">Failed to load rooms.</div>';
+        }
+      }
+
+      document.getElementById('refresh-rooms-btn').addEventListener('click', fetchRooms);
+      fetchRooms();
+
     </script>
     <script type="module" src="/src/main.ts"></script>
   </body>

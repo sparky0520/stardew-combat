@@ -79,6 +79,7 @@ export class GameRoom extends Room<any> {
     }
 
     onCreate(options: any) {
+        this.setMetadata({ roomName: options.roomName || "game_room" });
         const state = new GameState();
         state.players = new MapSchema<Player>();
         state.weaponDrops = new MapSchema<WeaponDrop>();
