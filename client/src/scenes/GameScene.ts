@@ -29,15 +29,23 @@ export class GameScene extends Phaser.Scene {
     }
 
     preload() {
-        const sprites = ['priest1', 'priest2', 'priest3', 'skeleton1', 'skeleton2', 'skull', 'vampire'];
-        sprites.forEach(sprite => {
+        const priests = ['priest1', 'priest2', 'priest3', 'skull'];
+        priests.forEach(sprite => {
             const isPriest = sprite.startsWith('priest');
             const folder = isPriest ? 'priests_idle' : 'monsters_idle';
-            const filePrefix = sprite === 'skeleton1' ? 'skeleton' : sprite;
             for (let i = 1; i <= 4; i++) {
-                this.load.image(`${sprite}_f${i}`, `assets/dungeon/2D Pixel Dungeon Asset Pack/Character_animation/${folder}/${sprite}/v1/${filePrefix}_v1_${i}.png`);
+                this.load.image(`${sprite}_f${i}`, `assets/dungeon/2D Pixel Dungeon Asset Pack/Character_animation/${folder}/${sprite}/v1/${sprite}_v1_${i}.png`);
             }
         });
+
+        const newEnemies = ['skeleton1', 'skeleton2', 'vampire'];
+        newEnemies.forEach(sprite => {
+            this.load.spritesheet(`${sprite}_idle`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_idle.png`, { frameWidth: 32, frameHeight: 32 });
+            this.load.spritesheet(`${sprite}_movement`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_movement.png`, { frameWidth: 32, frameHeight: 32 });
+            this.load.spritesheet(`${sprite}_attack`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_attack.png`, { frameWidth: 32, frameHeight: 32 });
+            this.load.spritesheet(`${sprite}_take_damage`, `assets/enemies/Enemy_Animations_Set/enemies-${sprite}_take_damage.png`, { frameWidth: 32, frameHeight: 32 });
+        });
+
         this.load.image('chest', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/mini_chest/mini_chest_1.png');
         this.load.image('dungeon_tiles', 'assets/dungeon/2D Pixel Dungeon Asset Pack/character and tileset/Dungeon_Tileset.png');
     }
@@ -79,8 +87,8 @@ export class GameScene extends Phaser.Scene {
         });
 
         // create animations
-        const sprites = ['priest1', 'priest2', 'priest3', 'skeleton1', 'skeleton2', 'skull', 'vampire'];
-        sprites.forEach(sprite => {
+        const priests = ['priest1', 'priest2', 'priest3', 'skull'];
+        priests.forEach(sprite => {
             const frames = [];
             for (let i = 1; i <= 4; i++) {
                 frames.push({ key: `${sprite}_f${i}` });
@@ -91,6 +99,14 @@ export class GameScene extends Phaser.Scene {
                 frameRate: 8,
                 repeat: -1
             });
+        });
+
+        const newEnemies = ['skeleton1', 'skeleton2', 'vampire'];
+        newEnemies.forEach(sprite => {
+            this.anims.create({ key: `${sprite}_idle`, frames: this.anims.generateFrameNumbers(`${sprite}_idle`, { start: 0, end: 5 }), frameRate: 8, repeat: -1 });
+            this.anims.create({ key: `${sprite}_movement`, frames: this.anims.generateFrameNumbers(`${sprite}_movement`, { start: 0, end: 9 }), frameRate: 12, repeat: -1 });
+            this.anims.create({ key: `${sprite}_attack`, frames: this.anims.generateFrameNumbers(`${sprite}_attack`, { start: 0, end: 8 }), frameRate: 15, repeat: 0 });
+            this.anims.create({ key: `${sprite}_take_damage`, frames: this.anims.generateFrameNumbers(`${sprite}_take_damage`, { start: 0, end: 4 }), frameRate: 12, repeat: 0 });
         });
 
         // Connect to the local Colyseus server
@@ -130,7 +146,10 @@ export class GameScene extends Phaser.Scene {
             const isCurrentPlayer = sessionId === this.room.sessionId;
             const spriteKey = player.sprite || 'priest1';
             
-            const entity = this.physics.add.sprite(player.x, player.y, `${spriteKey}_f1`);
+            const isNewEnemy = ['skeleton1', 'skeleton2', 'vampire'].includes(spriteKey);
+            const initialTexture = isNewEnemy ? `${spriteKey}_idle` : `${spriteKey}_f1`;
+            
+            const entity = this.physics.add.sprite(player.x, player.y, initialTexture);
             entity.setScale(2); 
             entity.setCollideWorldBounds(true);
             entity.play(`${spriteKey}_idle`);
@@ -237,6 +256,16 @@ export class GameScene extends Phaser.Scene {
                 const entity = this.playerEntities[sessionId];
                 if (entity) {
                     if (sessionId !== this.room.sessionId) {
+                        const isMoving = Math.abs(entity.x - player.x) > 1 || Math.abs(entity.y - player.y) > 1;
+                        if (['skeleton1', 'skeleton2', 'vampire'].includes(player.sprite)) {
+                            if (isMoving) {
+                                entity.play(`${player.sprite}_movement`, true);
+                                entity.flipX = (player.x < entity.x);
+                            } else if (entity.anims.currentAnim?.key !== `${player.sprite}_attack` && entity.anims.currentAnim?.key !== `${player.sprite}_take_damage`) {
+                                entity.play(`${player.sprite}_idle`, true);
+                            }
+                        }
+
                         this.tweens.add({
                             targets: entity,
                             x: player.x,
@@ -282,6 +311,85 @@ export class GameScene extends Phaser.Scene {
         this.room.onMessage("gameOver", (winner: any) => {
             document.getElementById('timer')!.innerText = `Game Over! Winner: ${winner.sessionId} with ${winner.kills} kills`;
         });
+
+        this.room.onMessage("playerAttacked", (data) => {
+            const attacker = this.playerEntities[data.playerId];
+            if (attacker) {
+                const playerState = this.room.state.players.get(data.playerId);
+                const spriteKey = playerState?.sprite;
+                
+                if (spriteKey && ['skeleton1', 'skeleton2', 'vampire'].includes(spriteKey)) {
+                    attacker.play(`${spriteKey}_attack`, true);
+                    attacker.once('animationcomplete', () => {
+                        attacker.play(`${spriteKey}_idle`, true);
+                    });
+                } else {
+                    const sword = this.add.graphics();
+                    sword.fillStyle(0xcccccc, 1);
+                    sword.lineStyle(2, 0x000000, 1);
+                    sword.beginPath();
+                    sword.moveTo(0, -4);
+                    sword.lineTo(25, -4);
+                    sword.lineTo(35, 0);
+                    sword.lineTo(25, 4);
+                    sword.lineTo(0, 4);
+                    sword.closePath();
+                    sword.fillPath();
+                    sword.strokePath();
+
+                    // Draw hilt
+                    sword.fillStyle(0x8B4513, 1); // brown
+                    sword.fillRect(-5, -6, 5, 12);
+
+                    sword.setPosition(attacker.x, attacker.y);
+                    sword.rotation = Phaser.Math.DegToRad(-45);
+
+                    this.tweens.add({
+                        targets: sword,
+                        rotation: Phaser.Math.DegToRad(135),
+                        duration: 150,
+                        onComplete: () => sword.destroy()
+                    });
+                }
+            }
+        });
+
+        this.room.onMessage("damageTaken", (data) => {
+            const target = this.playerEntities[data.targetId];
+            if (target) {
+                const playerState = this.room.state.players.get(data.targetId);
+                const spriteKey = playerState?.sprite;
+
+                if (spriteKey && ['skeleton1', 'skeleton2', 'vampire'].includes(spriteKey)) {
+                    target.play(`${spriteKey}_take_damage`, true);
+                    target.once('animationcomplete', () => {
+                        target.play(`${spriteKey}_idle`, true);
+                    });
+                } else {
+                    target.setTint(0xff0000);
+                    this.time.delayedCall(150, () => {
+                        target.clearTint();
+                    });
+                }
+            }
+
+            const damageText = this.add.text(data.x, data.y - 20, data.damage.toString(), {
+                fontSize: '24px',
+                fontFamily: 'Impact, sans-serif',
+                color: '#ff4444',
+                stroke: '#000000',
+                strokeThickness: 4
+            }).setOrigin(0.5);
+
+            this.tweens.add({
+                targets: damageText,
+                y: data.y - 60,
+                alpha: 0,
+                duration: 800,
+                ease: 'Power1',
+                onComplete: () => damageText.destroy()
+            });
+        });
     }
 
     private updateUI() {
@@ -321,19 +429,6 @@ export class GameScene extends Phaser.Scene {
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
             if (pointer.leftButtonDown() && this.room) {
                 this.room.send("attack");
-                
-                // Visual cue for attack
-                const me = this.playerEntities[this.room.sessionId];
-                if (me) {
-                    const slash = this.add.circle(me.x, me.y, 30, 0xffffff, 0.5);
-                    this.tweens.add({
-                        targets: slash,
-                        alpha: 0,
-                        scale: 1.5,
-                        duration: 150,
-                        onComplete: () => slash.destroy()
-                    });
-                }
             }
         });
     }
@@ -382,6 +477,10 @@ export class GameScene extends Phaser.Scene {
             const currentPlayer = this.playerEntities[this.room.sessionId];
             if (currentPlayer) {
                 currentPlayer.setVelocity(dx * speed, dy * speed);
+                if (['skeleton1', 'skeleton2', 'vampire'].includes(me.sprite)) {
+                    currentPlayer.play(`${me.sprite}_movement`, true);
+                    currentPlayer.flipX = (dx < 0);
+                }
                 
                 // Send the resulting physics position to the server
                 this.room.send("move", { x: currentPlayer.x, y: currentPlayer.y });
@@ -390,6 +489,11 @@ export class GameScene extends Phaser.Scene {
             const currentPlayer = this.playerEntities[this.room.sessionId];
             if (currentPlayer) {
                 currentPlayer.setVelocity(0, 0);
+                if (['skeleton1', 'skeleton2', 'vampire'].includes(me.sprite)) {
+                    if (currentPlayer.anims.currentAnim?.key !== `${me.sprite}_attack` && currentPlayer.anims.currentAnim?.key !== `${me.sprite}_take_damage`) {
+                        currentPlayer.play(`${me.sprite}_idle`, true);
+                    }
+                }
             }
         }
     }

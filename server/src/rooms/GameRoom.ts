@@ -60,6 +60,8 @@ export class GameRoom extends Room<any> {
             if (attacker.ammo <= 0) {
                 attacker.weaponId = "";
             }
+
+            this.broadcast("playerAttacked", { playerId: client.sessionId });
             
             // Basic combat: hit any player within 60 units (Zelda sword style)
             this.state.players.forEach((target: Player, targetId: string) => {
@@ -67,6 +69,7 @@ export class GameRoom extends Room<any> {
                     const dist = Math.sqrt(Math.pow(attacker.x - target.x, 2) + Math.pow(attacker.y - target.y, 2));
                     if (dist < 60 && target.health > 0 && !target.isImmune) {
                         target.health -= 25;
+                        this.broadcast("damageTaken", { targetId: targetId, damage: 25, x: target.x, y: target.y });
                         if (target.health <= 0) {
                             attacker.kills += 1;
                             client.send("killLog", { name: target.name });
