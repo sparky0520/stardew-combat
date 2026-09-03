@@ -89,3 +89,14 @@ export const TRAP_SPAWNS = [
     toWorld(27, 19),
     toWorld(27, 20)
 ];
+
+export const TORCH_SPAWNS = [
+    { ...toWorld(1, 10), angle: 0, wall: 'left' },
+    { ...toWorld(1, 30), angle: 0, wall: 'left' },
+    { ...toWorld(MAP_WIDTH - 2, 10), angle: Math.PI, wall: 'right' },
+    { ...toWorld(MAP_WIDTH - 2, 30), angle: Math.PI, wall: 'right' },
+    { ...toWorld(10, 1), angle: Math.PI / 2, wall: 'top' },
+    { ...toWorld(30, 1), angle: Math.PI / 2, wall: 'top' },
+    { ...toWorld(10, MAP_HEIGHT - 2), angle: -Math.PI / 2, wall: 'bottom' },
+    { ...toWorld(30, MAP_HEIGHT - 2), angle: -Math.PI / 2, wall: 'bottom' }
+];

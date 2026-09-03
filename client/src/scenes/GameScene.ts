@@ -60,6 +60,11 @@ export class GameScene extends Phaser.Scene {
         for (let i = 1; i <= 4; i++) {
             this.load.image(`flame_${i}`, `assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/flamethrower/flamethrower_2_${i}.png`);
         }
+        
+        for (let i = 1; i <= 4; i++) {
+            this.load.image(`torch_top_${i}`, `assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/torch/torch_${i}.png`);
+            this.load.image(`torch_side_${i}`, `assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/torch/side_torch_${i}.png`);
+        }
 
         this.load.image('arrow', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/arrow/Just_arrow.png');
         this.load.image('flask', 'assets/dungeon/2D Pixel Dungeon Asset Pack/items and trap_animation/flasks/flasks_1_1.png');
@@ -170,6 +175,42 @@ export class GameScene extends Phaser.Scene {
             ],
             frameRate: 15,
             repeat: 0
+        });
+
+        this.anims.create({
+            key: 'flame_fire_loop',
+            frames: [
+                { key: 'flame_1' },
+                { key: 'flame_2' },
+                { key: 'flame_3' },
+                { key: 'flame_4' }
+            ],
+            frameRate: 15,
+            repeat: -1
+        });
+
+        this.anims.create({
+            key: 'torch_top_anim',
+            frames: [
+                { key: 'torch_top_1' },
+                { key: 'torch_top_2' },
+                { key: 'torch_top_3' },
+                { key: 'torch_top_4' }
+            ],
+            frameRate: 10,
+            repeat: -1
+        });
+
+        this.anims.create({
+            key: 'torch_side_anim',
+            frames: [
+                { key: 'torch_side_1' },
+                { key: 'torch_side_2' },
+                { key: 'torch_side_3' },
+                { key: 'torch_side_4' }
+            ],
+            frameRate: 10,
+            repeat: -1
         });
 
         // Connect to the local Colyseus server
@@ -335,18 +376,33 @@ export class GameScene extends Phaser.Scene {
         });
 
         callbacks.onAdd("traps", (trap: any, trapId: string) => {
-            if (trap.type === "puddle") {
+            if (trap.type.startsWith("torch_")) {
+                const wallType = trap.type.split("_")[1];
+                const isSide = wallType === 'left' || wallType === 'right';
+                const animKey = isSide ? 'torch_side_anim' : 'torch_top_anim';
+                
+                const entity = this.add.sprite(trap.x, trap.y, isSide ? 'torch_side_1' : 'torch_top_1');
+                entity.setScale(2);
+                entity.setDepth(1.5);
+                entity.play(animKey);
+                
+                // Adjust facing depending on wall side
+                if (wallType === 'right') entity.flipX = true;
+                if (wallType === 'bottom') entity.flipY = true;
+                
+                this.trapEntities[trapId] = entity;
+            } else if (trap.type === "puddle") {
                 const entity = this.add.graphics();
                 entity.setPosition(trap.x, trap.y);
                 entity.setDepth(0); // floor-level
                 
                 // Draw a bright green irregular puddle
                 entity.fillStyle(0x33ff33, 0.7); // Bright transparent green
-                entity.fillEllipse(0, 0, 70, 45); // Width 70, Height 45
+                entity.fillCircle(0, 0, 50); // Radius 50
                 
                 // Add an inner core
                 entity.fillStyle(0x77ff77, 0.9);
-                entity.fillEllipse(0, 0, 40, 20);
+                entity.fillCircle(0, 0, 30); // Radius 30
 
                 // Add a pulse animation to make it look like bubbling acid
                 this.tweens.add({
@@ -378,7 +434,14 @@ export class GameScene extends Phaser.Scene {
 
         // Listen for Projectiles
         callbacks.onAdd("projectiles", (proj: any, projId: string) => {
-            if (proj.type === "flask") {
+            if (proj.type === "fireball") {
+                const entity = this.add.sprite(proj.x, proj.y, 'flame_1');
+                entity.setScale(2);
+                entity.setDepth(2);
+                entity.setRotation(proj.angle);
+                entity.play('flame_fire_loop');
+                this.projectileEntities[projId] = entity;
+            } else if (proj.type === "flask") {
                 const entity = this.add.sprite(proj.x, proj.y, 'flask');
                 entity.setScale(1.5);
                 entity.setDepth(2);
@@ -498,8 +561,8 @@ export class GameScene extends Phaser.Scene {
             state.traps?.forEach((trap: any, trapId: string) => {
                 const entity = this.trapEntities[trapId];
                 if (entity) {
-                    if (trap.type === "puddle") {
-                        // puddle logic (optional animation or scaling)
+                    if (trap.type === "puddle" || trap.type.startsWith("torch_")) {
+                        // handled naturally via tweens/animations
                     } else {
                         const isActive = trap.active;
                         const isPlayingAnim = entity.anims && entity.anims.isPlaying && entity.anims.currentAnim?.key === 'peaks_trigger';

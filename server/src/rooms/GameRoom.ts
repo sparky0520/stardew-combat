@@ -1,18 +1,20 @@
 import { Room, Client } from "colyseus";
 import { GameState, Player, WeaponDrop, Trap, Projectile } from "../schema/GameState";
 import { MapSchema } from "@colyseus/schema";
-import { PLAYER_SPAWNS, WEAPON_SPAWNS, TRAP_SPAWNS } from "../shared/mapConfig";
+import { PLAYER_SPAWNS, WEAPON_SPAWNS, TRAP_SPAWNS, TORCH_SPAWNS } from "../shared/mapConfig";
 
 export class GameRoom extends Room<any> {
     maxClients = 8;
     timerInterval: NodeJS.Timeout | null = null;
     weaponSpawnerInterval: NodeJS.Timeout | null = null;
+    torchInterval: NodeJS.Timeout | null = null;
     weaponIdCounter = 0;
     trapIdCounter = 0;
     projectileIdCounter = 0;
     private lastSpikeHit: Map<string, number> = new Map();
     private lastPuddleHit: Map<string, number> = new Map();
     private flaskTargets: Map<string, {x: number, y: number}> = new Map();
+    private torchAngles: Map<string, number> = new Map();
 
     private handlePlayerDeath(targetId: string, target: Player, killerClient?: Client, killerName?: string) {
         if (killerClient && killerName) {
@@ -61,6 +63,18 @@ export class GameRoom extends Room<any> {
             trap.type = "spike";
             trap.active = false;
             this.state.traps.set(`trap_${this.trapIdCounter++}`, trap);
+        });
+
+        // Initialize Wall Torches
+        TORCH_SPAWNS.forEach((spawn) => {
+            const trap = new Trap();
+            trap.x = spawn.x;
+            trap.y = spawn.y;
+            trap.type = `torch_${spawn.wall}`;
+            trap.active = true;
+            const trapId = `trap_${this.trapIdCounter++}`;
+            this.state.traps.set(trapId, trap);
+            this.torchAngles.set(trapId, spawn.angle);
         });
 
         this.onMessage("move", (client, message) => {
@@ -216,6 +230,25 @@ export class GameRoom extends Room<any> {
 
         this.weaponSpawnerInterval = setInterval(spawnWeapon, 15000); // 15 seconds interval
 
+        // Periodic Fireball Shooting from Torches
+        this.torchInterval = setInterval(() => {
+            if (this.state.gameEnded) return;
+            this.state.traps.forEach((trap: Trap, trapId: string) => {
+                if (trap.type.startsWith("torch")) {
+                    const angle = this.torchAngles.get(trapId);
+                    if (angle !== undefined) {
+                        const projectile = new Projectile();
+                        projectile.x = trap.x;
+                        projectile.y = trap.y;
+                        projectile.angle = angle;
+                        projectile.type = "fireball";
+                        projectile.ownerId = "environment";
+                        this.state.projectiles.set(`proj_${this.projectileIdCounter++}`, projectile);
+                    }
+                }
+            });
+        }, 2500); // Fireballs every 2.5 seconds
+
         // Fast simulation loop for projectiles
         this.setSimulationInterval((deltaTime) => {
             if (this.state.gameEnded) return;
@@ -260,20 +293,26 @@ export class GameRoom extends Room<any> {
                     return;
                 }
 
-                if (proj.type === "arrow") {
+                if (proj.type === "arrow" || proj.type === "fireball") {
                     let hit = false;
                     this.state.players.forEach((player: Player, playerId: string) => {
                         if (!hit && playerId !== proj.ownerId && player.health > 0 && !player.isImmune) {
                             const dist = Math.sqrt(Math.pow(player.x - proj.x, 2) + Math.pow(player.y - proj.y, 2));
-                            if (dist < 20) { // Arrow hit radius
+                            if (dist < 20) { // Arrow/Fireball hit radius
                                 hit = true;
-                                player.health -= 20; // Arrow damage
-                                this.broadcast("damageTaken", { targetId: playerId, damage: 20, x: player.x, y: player.y });
+                                const damage = proj.type === "fireball" ? 15 : 20;
+                                player.health -= damage;
+                                this.broadcast("damageTaken", { targetId: playerId, damage: damage, x: player.x, y: player.y });
                                 if (player.health <= 0) {
-                                    const owner = this.state.players.get(proj.ownerId);
-                                    if (owner) owner.kills += 1;
-                                    const ownerClient = this.clients.find(c => c.sessionId === proj.ownerId);
-                                    this.handlePlayerDeath(playerId, player, ownerClient, player.name);
+                                    if (proj.ownerId !== "environment") {
+                                        const owner = this.state.players.get(proj.ownerId);
+                                        if (owner) owner.kills += 1;
+                                        const ownerClient = this.clients.find(c => c.sessionId === proj.ownerId);
+                                        this.handlePlayerDeath(playerId, player, ownerClient, player.name);
+                                    } else {
+                                        this.broadcast("killLog", { message: `${player.name} was incinerated by a fireball!` });
+                                        this.handlePlayerDeath(playerId, player);
+                                    }
                                 }
                                 this.state.projectiles.delete(projId);
                             }
