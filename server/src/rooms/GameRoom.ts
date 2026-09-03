@@ -473,7 +473,7 @@ export class GameRoom extends Room<any> {
         const player = this.state.players.get(client.sessionId);
         const playerName = player ? player.name : "Unknown";
 
-        if (code === 1000) {
+        if (code === 4000) { // CloseCode.CONSENTED
             this.state.players.delete(client.sessionId);
             this.broadcast("killLog", { message: `${playerName} left the game!` });
             return;
