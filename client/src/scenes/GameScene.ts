@@ -297,14 +297,14 @@ export class GameScene extends Phaser.Scene {
             entity.setDepth(0); // Render floor-level
             this.trapEntities[trapId] = entity;
             
-            trap.onChange(() => {
+            trap.onChange = (changes: any) => {
                 if (trap.active) {
                     entity.play('peaks_trigger');
                 } else {
                     entity.stop();
                     entity.setTexture('trap_peaks_1');
                 }
-            });
+            };
         });
 
         callbacks.onRemove("traps", (trap: any, trapId: string) => {
