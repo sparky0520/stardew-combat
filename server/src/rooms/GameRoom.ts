@@ -18,6 +18,37 @@ export class GameRoom extends Room<any> {
     private flaskTargets: Map<string, {x: number, y: number}> = new Map();
     private torchAngles: Map<string, number> = new Map();
 
+    private getBestSpawnPoint() {
+        if (this.state.players.size === 0) {
+            return PLAYER_SPAWNS[Math.floor(Math.random() * PLAYER_SPAWNS.length)];
+        }
+
+        let bestSpawn = PLAYER_SPAWNS[0];
+        let maxMinDistance = -1;
+
+        PLAYER_SPAWNS.forEach(spawn => {
+            let minDistanceToAnyPlayer = Infinity;
+            this.state.players.forEach((player: Player) => {
+                const dist = Math.sqrt(Math.pow(player.x - spawn.x, 2) + Math.pow(player.y - spawn.y, 2));
+                if (dist < minDistanceToAnyPlayer) {
+                    minDistanceToAnyPlayer = dist;
+                }
+            });
+
+            if (minDistanceToAnyPlayer > maxMinDistance) {
+                maxMinDistance = minDistanceToAnyPlayer;
+                bestSpawn = spawn;
+            } else if (minDistanceToAnyPlayer === maxMinDistance) {
+                // Tie breaker: random
+                if (Math.random() > 0.5) {
+                    bestSpawn = spawn;
+                }
+            }
+        });
+
+        return bestSpawn;
+    }
+
     private handlePlayerDeath(targetId: string, target: Player, killerClient?: Client, killerName?: string) {
         if (killerClient && killerName) {
             killerClient.send("killLog", { name: target.name });
@@ -28,7 +59,7 @@ export class GameRoom extends Room<any> {
             if (this.state.players.has(targetId)) {
                 const p = this.state.players.get(targetId)!;
                 p.health = 100;
-                const spawn = PLAYER_SPAWNS[Math.floor(Math.random() * PLAYER_SPAWNS.length)];
+                const spawn = this.getBestSpawnPoint();
                 p.x = spawn.x;
                 p.y = spawn.y;
                 p.isImmune = true;
@@ -411,7 +442,7 @@ export class GameRoom extends Room<any> {
     onJoin(client: Client, options: any) {
         console.log(client.sessionId, "joined!");
         const player = new Player();
-        const spawn = PLAYER_SPAWNS[Math.floor(Math.random() * PLAYER_SPAWNS.length)];
+        const spawn = this.getBestSpawnPoint();
         player.x = spawn.x;
         player.y = spawn.y;
         player.health = 100;
