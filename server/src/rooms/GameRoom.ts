@@ -450,10 +450,12 @@ export class GameRoom extends Room<any> {
         player.kills = 0;
         player.weaponId = "";
         player.ammo = 0;
-        player.name = options.name || "Unknown";
-        player.sprite = options.sprite || "priest";
+        player.name = options.name;
+        player.sprite = options.sprite;
         player.isImmune = true;
         this.state.players.set(client.sessionId, player);
+
+        this.broadcast("killLog", { message: `${player.name} joined the arena!` });
 
         setTimeout(() => {
             if (this.state.players.has(client.sessionId)) {
@@ -462,9 +464,25 @@ export class GameRoom extends Room<any> {
         }, 5000);
     }
 
-    onLeave(client: Client, code?: number) {
+    async onLeave(client: Client, code?: number) {
         console.log(client.sessionId, "left!");
-        this.state.players.delete(client.sessionId);
+        const player = this.state.players.get(client.sessionId);
+        const playerName = player ? player.name : "Unknown";
+
+        if (code === 1000) {
+            this.state.players.delete(client.sessionId);
+            this.broadcast("killLog", { message: `${playerName} left the game!` });
+            return;
+        }
+
+        try {
+            this.broadcast("killLog", { message: `${playerName} disconnected!` });
+            await this.allowReconnection(client, 20);
+            this.broadcast("killLog", { message: `${playerName} reconnected!` });
+            console.log(client.sessionId, "reconnected!");
+        } catch (e) {
+            this.state.players.delete(client.sessionId);
+        }
     }
 
     onDispose() {

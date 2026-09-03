@@ -1,11 +1,7 @@
 import Phaser from 'phaser';
 import { GameScene } from './scenes/GameScene';
 
-document.getElementById('join-btn')?.addEventListener('click', () => {
-    const playerName = (document.getElementById('player-name') as HTMLInputElement).value || 'Player';
-    const roomNumber = (document.getElementById('room-number') as HTMLInputElement).value || 'game_room';
-    const playerSprite = (document.getElementById('player-sprite') as HTMLSelectElement).value || 'priest';
-
+function startGame(playerName: string, roomNumber: string, playerSprite: string) {
     // Hide home screen, show app and UI
     document.getElementById('home-screen')!.style.display = 'none';
     document.getElementById('app')!.style.display = 'block';
@@ -38,4 +34,37 @@ document.getElementById('join-btn')?.addEventListener('click', () => {
     
     // Pass custom data to the GameScene
     game.scene.start('GameScene', { playerName, roomNumber, playerSprite });
+}
+
+const reconnectionToken = sessionStorage.getItem('reconnectionToken');
+
+if (reconnectionToken) {
+    const pName = sessionStorage.getItem('playerName');
+    const rNum = sessionStorage.getItem('roomNumber');
+    const pSprite = sessionStorage.getItem('playerSprite');
+    
+    if (pName && rNum && pSprite) {
+        startGame(pName, rNum, pSprite);
+    } else {
+        sessionStorage.clear();
+    }
+}
+
+document.getElementById('join-btn')?.addEventListener('click', () => {
+    const nameInput = document.getElementById('player-name') as HTMLInputElement;
+    const roomInput = document.getElementById('room-number') as HTMLInputElement;
+    const spriteInput = document.getElementById('player-sprite') as HTMLInputElement;
+
+    const playerName = nameInput.value || nameInput.placeholder || 'Player';
+    const roomNumber = roomInput.value || roomInput.placeholder || 'Lobby 1';
+    const playerSprite = spriteInput.value;
+    
+    if (!playerSprite) return;
+
+    // Save these so a refresh can use them if it falls back to joinOrCreate
+    sessionStorage.setItem('playerName', playerName);
+    sessionStorage.setItem('roomNumber', roomNumber);
+    sessionStorage.setItem('playerSprite', playerSprite);
+
+    startGame(playerName, roomNumber, playerSprite);
 });

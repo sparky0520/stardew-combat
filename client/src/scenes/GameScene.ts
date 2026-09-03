@@ -33,9 +33,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     init(data: any) {
-        this.playerName = data.playerName || 'Player';
-        this.roomNumber = data.roomNumber || 'game_room';
-        this.playerSprite = data.playerSprite || 'skeleton';
+        this.playerName = data.playerName;
+        this.roomNumber = data.roomNumber;
+        this.playerSprite = data.playerSprite;
     }
 
     preload() {
@@ -264,13 +264,30 @@ export class GameScene extends Phaser.Scene {
         this.client = new Client('ws://localhost:2567');
         
         try {
-            // Join or create a game_room matching the provided roomName
-            this.room = await this.client.joinOrCreate<GameState>('game_room', { 
-                name: this.playerName, 
-                sprite: this.playerSprite,
-                roomName: this.roomNumber
-            });
-            console.log('Joined room:', this.room.name);
+            const reconnectionToken = sessionStorage.getItem('reconnectionToken');
+
+            let reconnected = false;
+            if (reconnectionToken) {
+                try {
+                    this.room = (await this.client.reconnect(reconnectionToken)) as any;
+                    console.log('Reconnected successfully to room:', this.room.name);
+                    reconnected = true;
+                } catch (e) {
+                    console.log('Failed to reconnect, joining/creating a new room...', e);
+                }
+            }
+
+            if (!reconnected) {
+                // Join or create a game_room matching the provided roomName
+                this.room = await this.client.joinOrCreate<GameState>('game_room', { 
+                    name: this.playerName, 
+                    sprite: this.playerSprite,
+                    roomName: this.roomNumber
+                });
+                console.log('Joined room:', this.room.name);
+            }
+
+            sessionStorage.setItem('reconnectionToken', this.room.reconnectionToken);
             
             this.setupColyseusListeners();
             this.setupInputEvents();
@@ -306,13 +323,9 @@ export class GameScene extends Phaser.Scene {
             
             const entity = this.physics.add.sprite(player.x, player.y, initialTexture);
             entity.setScale(2); 
-            entity.setDepth(2); // Players above traps and chests
-            
-            // Adjust physics body size based on sprite type so transparent padding doesn't create huge collision boxes
-            // 32x32 original sprite -> shrink to center
+            entity.setDepth(2);
             entity.body.setSize(14, 20);
             entity.body.setOffset(9, 12);
-            
             entity.setCollideWorldBounds(true);
             entity.play(`${spriteKey}_idle`);
             
@@ -507,7 +520,7 @@ export class GameScene extends Phaser.Scene {
             }
         });
 
-        callbacks.onRemove("traps", (trap: any, trapId: string) => {
+        callbacks.onRemove("traps", (_trap: any, trapId: string) => {
             const entity = this.trapEntities[trapId];
             if (entity) {
                 entity.destroy();
@@ -546,7 +559,7 @@ export class GameScene extends Phaser.Scene {
             }
         });
 
-        callbacks.onRemove("projectiles", (proj: any, projId: string) => {
+        callbacks.onRemove("projectiles", (_proj: any, projId: string) => {
             const entity = this.projectileEntities[projId];
             if (entity) {
                 entity.destroy();
@@ -667,6 +680,7 @@ export class GameScene extends Phaser.Scene {
             const cleanupAndLeave = () => {
                 if (isCleanedUp) return;
                 isCleanedUp = true;
+                sessionStorage.removeItem('reconnectionToken');
                 this.room.leave();
                 this.scene.start('MainMenuScene');
                 this.gameWinner = null;
