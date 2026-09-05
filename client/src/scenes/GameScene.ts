@@ -108,6 +108,42 @@ export class GameScene extends Phaser.Scene {
             this.wallLayer = map.createLayer(0, tileset, 0, 0) as Phaser.Tilemaps.TilemapLayer;
             this.wallLayer.setScale(SCALE);
             this.wallLayer.setCollision(TILE_WALL);
+            this.wallLayer.setTint(0xffaaaa); // Reddish tint for hellish look
+        }
+
+        // Generate shiny ember texture for fiery particles
+        const emberGraphics = this.make.graphics();
+        emberGraphics.fillStyle(0xffaa00, 0.4); // soft orange halo
+        emberGraphics.fillCircle(4, 4, 4);
+        emberGraphics.fillStyle(0xffffff, 1); // shiny white core
+        emberGraphics.fillCircle(4, 4, 1.5);
+        emberGraphics.generateTexture('ember', 8, 8);
+        emberGraphics.destroy(); // Clean up graphics object
+
+        // Hellish ambient ember particles (subtle, in the background)
+        const particleConfig = {
+            emitZone: {
+                type: 'random',
+                source: new Phaser.Geom.Rectangle(0, 0, MAP_PIXEL_SIZE, MAP_PIXEL_SIZE)
+            } as any,
+            lifespan: { min: 3000, max: 8000 }, // linger longer
+            speedY: { min: -5, max: -15 }, // drift slowly
+            speedX: { min: -10, max: 10 },
+            scale: { start: 0.3, end: 0 }, // very small
+            alpha: { start: 0.6, end: 0 },
+            blendMode: 'ADD',
+            quantity: 8, // More dense
+            frequency: 40 // Spawn more frequently
+        };
+
+        try {
+            const emitter = this.add.particles(0, 0, 'ember', particleConfig);
+            emitter.setDepth(0.5); // At the back, below players/chests (depth 1+) and traps
+        } catch (e) {
+            // Pre-3.60 fallback just in case
+            const particles = (this.add as any).particles('ember');
+            particles.createEmitter(particleConfig);
+            particles.setDepth(0.5);
         }
 
         // Setup Full Map (Toggleable with 'M')
@@ -163,10 +199,10 @@ export class GameScene extends Phaser.Scene {
             event.preventDefault();
         });
 
-        const spritesheetFrames: { [key: string]: { idle: number, movement: number, attack: number, damage: number } } = {
-            'skeleton': { idle: 6, movement: 10, attack: 9, damage: 5 },
-            'vampire': { idle: 6, movement: 8, attack: 16, damage: 5 },
-            'knight': { idle: 6, movement: 8, attack: 7, damage: 5 }
+        const spritesheetFrames: { [key: string]: { idle: number, movement: number, attack: number, damage: number, death: number } } = {
+            'skeleton': { idle: 6, movement: 10, attack: 9, damage: 5, death: 17 },
+            'vampire': { idle: 6, movement: 8, attack: 16, damage: 5, death: 14 },
+            'knight': { idle: 6, movement: 8, attack: 7, damage: 5, death: 7 }
         };
 
         const spritesheetAvatars = ['skeleton', 'vampire', 'knight'];
@@ -176,6 +212,7 @@ export class GameScene extends Phaser.Scene {
             this.anims.create({ key: `${sprite}_movement`, frames: this.anims.generateFrameNumbers(`${sprite}_movement`, { start: 0, end: f.movement - 1 }), frameRate: 12, repeat: -1 });
             this.anims.create({ key: `${sprite}_attack`, frames: this.anims.generateFrameNumbers(`${sprite}_attack`, { start: 0, end: f.attack - 1 }), frameRate: 15, repeat: 0 });
             this.anims.create({ key: `${sprite}_take_damage`, frames: this.anims.generateFrameNumbers(`${sprite}_take_damage`, { start: 0, end: f.damage - 1 }), frameRate: 12, repeat: 0 });
+            this.anims.create({ key: `${sprite}_death`, frames: this.anims.generateFrameNumbers(`${sprite}_death`, { start: 0, end: f.death - 1 }), frameRate: 12, repeat: 0 });
         });
 
         this.anims.create({
@@ -705,7 +742,10 @@ export class GameScene extends Phaser.Scene {
                 isCleanedUp = true;
                 sessionStorage.removeItem('reconnectionToken');
                 this.room.leave();
-                this.scene.start('MainMenuScene');
+                this.game.destroy(true);
+                document.getElementById('home-screen')!.style.display = 'flex';
+                document.getElementById('app')!.style.display = 'none';
+                document.getElementById('ui-layer')!.style.display = 'none';
                 this.gameWinner = null;
                 document.getElementById('scoreboard')!.style.display = 'none';
                 if (escKey) this.input.keyboard?.removeKey('ESC');
@@ -927,7 +967,9 @@ export class GameScene extends Phaser.Scene {
         if (scoreboardEl) {
             let html = '';
             if (this.gameWinner) {
-                html += `<div style="text-align: center; color: #ffd700; font-size: 24px; margin-bottom: 10px;">Game Over!<br/>Winner: ${this.gameWinner.name} with ${this.gameWinner.kills} kills</div>`;
+                const isMeWinner = this.gameWinner.sessionId === this.room.sessionId;
+                const winnerText = isMeWinner ? `You Won!` : `${this.gameWinner.name} Won!`;
+                html += `<div style="text-align: center; color: #ffd700; font-size: 24px; margin-bottom: 10px;">Game Over!<br/>${winnerText} (${this.gameWinner.kills} kills)</div>`;
                 html += `<div style="text-align: center; color: #aaa; font-size: 14px; margin-bottom: 15px;">Press ESC to return to main menu immediately</div>`;
             }
             html += '<b>Scoreboard</b><br/>';
